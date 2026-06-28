@@ -46,3 +46,17 @@ void startTIA(){
 */
 
 }
+
+void stopTIA(){
+/*
+- TIA_address
+- wait for ACK
+- 0x12 = Targets the MODECN register
+- wait for ACK
+- 1 0000 000 = Enables analog reading from the Vout pin
+- wait for ACK
+- Stop condition
+
+*/
+
+}

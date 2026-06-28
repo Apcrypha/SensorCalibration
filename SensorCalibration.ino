@@ -33,3 +33,16 @@ void changeGain(){
 
 }
 
+void startTIA(){
+/*
+- TIA_address
+- wait for ACK
+- 0x12 = Targets the MODECN register
+- wait for ACK
+- 0 0000 011 = Enables analog reading from the Vout pin
+- wait for ACK
+- Stop condition
+
+*/
+
+}

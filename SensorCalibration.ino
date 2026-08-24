@@ -1,8 +1,28 @@
+#include <WiFi.h>
+#include "ThingSpeak.h"
+
+const char* ssid = "REPLACE_WITH_YOUR_SSID";   // your network SSID (name) 
+const char* password = "REPLACE_WITH_YOUR_PASSWORD";   // your network password
+
+WiFiClient  client;
+
+//----------------------------------------Thingspeak-----------------
+unsigned long myChannelNumber = 2;
+const char * myWriteAPIKey = "XXXXXXXXXXXXXXXX";
+
+
+
 #define TIA_address 0x90
 
 
+
+
+
 void setup() {
-  // put your setup code here, to run once:
+  Serial.begin(92000);
+  WiFi.mode(WIFI_STA);   
+  
+  ThingSpeak.begin(client);  // Initialize ThingSpeak
 
 }
 

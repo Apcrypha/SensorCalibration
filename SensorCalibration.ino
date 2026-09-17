@@ -1,8 +1,5 @@
-#include <WiFi.h>
-#include "ThingSpeak.h"
-#include "RRH62000.h"
-
 //-------------------------------------WiFi--------------------------
+#include <WiFi.h>
 
 WiFiClient  client;
 
@@ -10,18 +7,31 @@ const char* ssid = "REPLACE_WITH_YOUR_SSID";   // your network SSID (name)
 const char* password = "REPLACE_WITH_YOUR_PASSWORD";   // your network password
 
 
-
-//----------------------------------------Thingspeak-----------------
+//-------------------------------------Thingspeak-----------------
+#include "ThingSpeak.h"
 
 unsigned long myChannelNumber = 2;
 const char * myWriteAPIKey = "XXXXXXXXXXXXXXXX";
 
 
-//----------------------------------------RRH62000-------------------
+//-------------------------------------RRH62000-------------------
+#include "RRH62000.h"
+
 #define RRH_SDA 21
 #define RRH_SCL 22
 
 RRH62000 RRH_sensor;
+
+
+//-------------------------------------Gyro--------------------------
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
+
+Adafruit_MPU6050 mpu;
+
+
+
 
 
 void setup() {
@@ -29,10 +39,19 @@ void setup() {
   WiFi.mode(WIFI_STA);   
   
   if (!RRH_sensor.begin(RRH_SDA, RRH_SCL)) {
-        Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
-        while (1);
+      Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
+      while (1);
     }
-  
+
+  if (!mpu.begin()) {
+    Serial.println("Failed to find MPU6050 chip");
+    while (1);
+  }
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G); // Options are 2, 4, 8, 16 g
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);      // Options are ± 250, 500, 1000, 2000 deg/s
+   mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);   // Options are 5, 10, 21, 44 94, 184, 260 Hz
+
+
   ThingSpeak.begin(client);  // Initialize ThingSpeak
 
 }

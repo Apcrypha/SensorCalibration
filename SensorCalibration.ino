@@ -8,7 +8,7 @@ const char* password = "REPLACE_WITH_YOUR_PASSWORD";   // your network password
 
 
 //-------------------------------------Thingspeak-----------------
-#include "ThingSpeak.h"
+#include "ThingSpeak.h" //Thingspeak by mathworks
 
 unsigned long myChannelNumber = 2;
 const char * myWriteAPIKey = "XXXXXXXXXXXXXXXX";
@@ -35,7 +35,7 @@ Adafruit_MPU6050 mpu;
 
 
 void setup() {
-  Serial.begin(92000);
+  Serial.begin(92000); 
 
 //RRH62000  
   if (!RRH_sensor.begin(RRH_SDA, RRH_SCL)) {
@@ -50,12 +50,12 @@ void setup() {
   }
   mpu.setAccelerometerRange(MPU6050_RANGE_8_G); // Options are 2, 4, 8, 16 g
   mpu.setGyroRange(MPU6050_RANGE_500_DEG);      // Options are ± 250, 500, 1000, 2000 deg/s
-  mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);   // Options are 5, 10, 21, 44 94, 184, 260 Hz
+  mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);    // Options are 5, 10, 21, 44 94, 184, 260 Hz
 
 //WiFi
   WiFi.mode(WIFI_STA); 
   
-//Thingspeak  
+//Thingspeak
   ThingSpeak.begin(client);  // Initialize ThingSpeak
 
 }

@@ -12,6 +12,12 @@ const char* password = "Nigga_Bazooka";
 unsigned long gyroChannel_ID = 3498647;
 const char * gyroWriteAPIKey = "W6I9KNG5O1F41071";
 
+unsigned long PM_Channel_ID = 1111;
+const char * PM_WriteAPIKey = "xxxxx";
+
+unsigned long statusChannel_ID = 1111;
+const char * statusWriteAPIKey = "xxxxx";
+
 unsigned long lastUploadTime = 0;
 uint16_t uploadInterval = 16000; //in ms
 
@@ -21,6 +27,9 @@ uint16_t uploadInterval = 16000; //in ms
 
 #define RRH_SDA 21
 #define RRH_SCL 22
+
+#define samplingTime 180000 //Sampling interval should be (MovingAverage * 3) * 1000
+unsigned long lastSampledTime = 0;
 
 RRH62000 RRH_sensor;
 
@@ -45,8 +54,17 @@ void setup() {
 //RRH62000  
   if (!RRH_sensor.begin(RRH_SDA, RRH_SCL)) {
     Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
-    while (1);
+    while (!RRH_sensor.begin(RRH_SDA, RRH_SCL)){
+      Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
+      delay(1000);
     }
+  }
+
+  // Configure module parameters via I2C
+  RRH_sensor.setMovingAverage(60);          // Sampling interval should be MovingAverage * 3 
+  RRH_sensor.setCleaningInterval(2880);     // Set auto-cleaning interval (2880 * 30s = 24 hours)
+  RRH_sensor.setCleaningTime(15);           // Run fan cleaning for 15 seconds
+  RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
 
 //Gyro
   Wire.begin(SDA_PIN, SCL_PIN);
@@ -116,24 +134,34 @@ unsigned long currentMillis = millis();
     else{Serial.println("Problem updating gyro channel. HTTP error code " + String(x));    }
   }
 
+  if (currentMillis - lastSampledTime >= samplingTime) {
+    lastSampledTime = currentMillis;
 
-  if (RRH_sensor.readSensor()) {
+    if (RRH_sensor.readSensor()) {
 
-    //Must measure Temp, RH, PM10 & PM2.5 (KCl & Smoke)
+      //PM
+      ThingSpeak.setField(1,RRH_sensor.temperature);
+      ThingSpeak.setField(2,RRH_sensor.humidity);
+      ThingSpeak.setField(3,RRH_sensor.pm10_0_kcl);
+      ThingSpeak.setField(4,RRH_sensor.pm10_0_smoke);
+      ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
+      ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
 
-    // Read directly from library member variables
-    Serial.printf("PM2.5 (KCl): %.1f ug/m3 | PM2.5 (Smoke): %.1f ug/m3\n", RRH_sensor.pm2_5_kcl, RRH_sensor.pm2_5_smoke);
-    Serial.printf("PM10 (KCl): %.1f ug/m3 | PM10 (Smoke): %.1f ug/m3\n", RRH_sensor.pm10_0_kcl, RRH_sensor.pm10_0_smoke);
-    Serial.printf("Temp: %.2f C | Humidity: %.2f %%\n", RRH_sensor.temperature, RRH_sensor.humidity);
-    Serial.printf("TVOC: %u ug/m3 | eCO2: %u ppm | IAQ: %.2f\n", RRH_sensor.tvoc, RRH_sensor.eco2, RRH_sensor.iaq);
-    Serial.println("------------------------------------------------");
-    } else {
-      Serial.println("Failed to read sensor data or CRC mismatch.");
+      int x = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
+      if(x == 200){Serial.println("PM Channel update successful.");    }
+      else{Serial.println("Problem updating PM channel. HTTP error code " + String(x));    }
+      
+      //Status
+      if (RRH_sensor.status_fan_malfunction) {
+        ThingSpeak.setField(1, 1);} else{
+          ThingSpeak.setField(1, 0);      }
+
+      if (RRH_sensor.status_dust_accumulation) {
+        ThingSpeak.setField(2, 1);} else{
+          ThingSpeak.setField(2, 0);      }
+
     }
-
-
-
-
+  }
 }
 
 

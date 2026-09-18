@@ -47,11 +47,17 @@ public:
     bool isDataReady(); // Check if new data is available to read
     bool readSensor();  // Read full 37-byte measurement packet, validate CRC, and update internal variables
     
+    // --- Configuration Control Functions ---
+    bool setMovingAverage(uint8_t samples);                  // Reg 0x53: Range 1-60[cite: 1]
+    bool setCleaningInterval(uint16_t interval30s);          // Reg 0x5A/0x5B: Range 0-60480 (in 30s units)[cite: 1]
+    bool setCleaningTime(uint8_t seconds);                   // Reg 0x5C: Range 0-60 seconds[cite: 1]
+    bool setFanSpeed(uint8_t speedPercent);                  // Reg 0x63: Range 60-100 %[cite: 1]
 
 private:
     uint8_t _address;
     TwoWire *_wire;
 
+    bool writeRegister(uint8_t reg, uint8_t value);
     uint8_t calculateCRC8(const uint8_t *data, size_t length);
 };
 

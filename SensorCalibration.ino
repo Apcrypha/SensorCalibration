@@ -1,4 +1,4 @@
-//-------------------------------------WiFi--------------------------
+//-------------------------------------WiFi-----------------------
 #include <WiFi.h>
 
 WiFiClient  client;
@@ -21,6 +21,8 @@ const char * statusWriteAPIKey = "xxxxx";
 unsigned long lastUploadTime = 0;
 uint16_t uploadInterval = 16000; //in ms
 
+int uploadStatus;
+
 
 //-------------------------------------RRH62000-------------------
 #include "RRH62000.h"
@@ -34,7 +36,7 @@ unsigned long lastSampledTime = 0;
 RRH62000 RRH_sensor;
 
 
-//-------------------------------------Gyro--------------------------
+//-------------------------------------Gyro-----------------------
 #include <Wire.h>
 #include "FastIMU.h" //by LiquidCGS
 
@@ -129,9 +131,11 @@ unsigned long currentMillis = millis();
     ThingSpeak.setField(5,gyroData.gyroY);
     ThingSpeak.setField(6,gyroData.gyroZ);
 
-    int x = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey);
-    if(x == 200){Serial.println("Gyro Channel update successful.");    }
-    else{Serial.println("Problem updating gyro channel. HTTP error code " + String(x));    }
+    uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey);
+    if(uploadStatus == 200){Serial.println("Gyro Channel update successful.");    }
+    else{Serial.println("Problem updating gyro channel. HTTP error code " + String(uploadStatus));    }
+    
+    delay (1000);
   }
 
   if (currentMillis - lastSampledTime >= samplingTime) {
@@ -147,10 +151,12 @@ unsigned long currentMillis = millis();
       ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
       ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
 
-      int x = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
-      if(x == 200){Serial.println("PM Channel update successful.");    }
-      else{Serial.println("Problem updating PM channel. HTTP error code " + String(x));    }
+      uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
+      if(uploadStatus == 200){Serial.println("PM Channel update successful.");    }
+      else{Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));    }
       
+      delay(1000);
+
       //Status
       if (RRH_sensor.status_fan_malfunction) {
         ThingSpeak.setField(1, 1);} else{
@@ -159,6 +165,10 @@ unsigned long currentMillis = millis();
       if (RRH_sensor.status_dust_accumulation) {
         ThingSpeak.setField(2, 1);} else{
           ThingSpeak.setField(2, 0);      }
+
+      uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
+      if(uploadStatus == 200){Serial.println("PM Channel update successful.");    }
+      else{Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));    }
 
     }
   }

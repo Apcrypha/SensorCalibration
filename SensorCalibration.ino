@@ -3,9 +3,8 @@
 
 WiFiClient  client;
 
-const char* ssid = "REPLACE_WITH_YOUR_SSID";   // your network SSID (name) 
-const char* password = "REPLACE_WITH_YOUR_PASSWORD";   // your network password
-
+const char* ssid = "Teenage Nigga Turtles";    
+const char* password = "Nigga_Bazooka";   
 
 //-------------------------------------Thingspeak-----------------
 #include "ThingSpeak.h" //Thingspeak by mathworks
@@ -89,17 +88,17 @@ unsigned long currentMillis = millis();
   if (currentMillis - lastUploadTime >= uploadInterval) {
     lastUploadTime = currentMillis;
 
-  //Ensure WiFi is connected
-  if(WiFi.status() != WL_CONNECTED){
-    Serial.print("Connecting.....");
-    while(WiFi.status() != WL_CONNECTED){
-      WiFi.begin(ssid, password); 
-      delay(5000);     
-    } 
-    Serial.println("\nConnected.");
-  }
+    //Ensure WiFi is connected
+    if(WiFi.status() != WL_CONNECTED){
+      Serial.print("Connecting.....");
+      while(WiFi.status() != WL_CONNECTED){
+        WiFi.begin(ssid, password); 
+        delay(5000);     
+      } 
+      Serial.println("\nConnected.");
+    }
 
-  //Gyro
+    //Gyro
     IMU.update();
     IMU.getAccel(&accelData);
     IMU.getGyro(&gyroData);
@@ -117,6 +116,20 @@ unsigned long currentMillis = millis();
     else{Serial.println("Problem updating gyro channel. HTTP error code " + String(x));    }
   }
 
+
+  if (RRH_sensor.readSensor()) {
+
+    //Must measure Temp, RH, PM10 & PM2.5 (KCl & Smoke)
+
+    // Read directly from library member variables
+    Serial.printf("PM2.5 (KCl): %.1f ug/m3 | PM2.5 (Smoke): %.1f ug/m3\n", RRH_sensor.pm2_5_kcl, RRH_sensor.pm2_5_smoke);
+    Serial.printf("PM10 (KCl): %.1f ug/m3 | PM10 (Smoke): %.1f ug/m3\n", RRH_sensor.pm10_0_kcl, RRH_sensor.pm10_0_smoke);
+    Serial.printf("Temp: %.2f C | Humidity: %.2f %%\n", RRH_sensor.temperature, RRH_sensor.humidity);
+    Serial.printf("TVOC: %u ug/m3 | eCO2: %u ppm | IAQ: %.2f\n", RRH_sensor.tvoc, RRH_sensor.eco2, RRH_sensor.iaq);
+    Serial.println("------------------------------------------------");
+    } else {
+      Serial.println("Failed to read sensor data or CRC mismatch.");
+    }
 
 
 

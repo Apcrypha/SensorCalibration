@@ -49,8 +49,8 @@ GyroData gyroData;
 #include "esp_wifi.h"
 #include "esp_sleep.h"
 
-const uint64_t sleepTime = 180ULL * 1000000ULL; // Must be in ms. Must use Unsigned Long Long(ULL) since its in 64bit. Format is (seconds * ms/s)
-
+const uint64_t sleepTime = 173ULL * 1000000ULL; // Must be in ms. Must use Unsigned Long Long(ULL) since its in 64bit. Format is (seconds * ms/s)
+//due to wifi reasons reduce the actual sleep time with 7seconds for thingspeak
 
 void setup() {
   Serial.begin(115200); 
@@ -89,32 +89,25 @@ void setup() {
 //WiFi
   WiFi.mode(WIFI_STA); 
   
-  if(WiFi.status() != WL_CONNECTED){
-    Serial.print("Attempting to connect");
-    while(WiFi.status() != WL_CONNECTED){
-      WiFi.begin(ssid, password); 
-      delay(5000);     
-    } 
-    Serial.println("\nConnected.");
-  }
-
+  Serial.print("Attempting to connect");
+  while(WiFi.status() != WL_CONNECTED){
+    WiFi.begin(ssid, password); 
+    delay(5000);     
+  } 
+  Serial.println("\nConnected.");
+  
 //Thingspeak
   ThingSpeak.begin(client);  // Initialize ThingSpeak
 }
 
 
 void loop() {
-
-//ThingSpeak
-  //Ensure WiFi is connected
-  if(WiFi.status() != WL_CONNECTED){
-    Serial.print("Connecting.....");
-    while(WiFi.status() != WL_CONNECTED){
-      WiFi.begin(ssid, password); 
-      delay(5000);     
-    } 
-    Serial.println("\nConnected.");
-  }
+//Ensure WiFi is connected
+  while(WiFi.status() != WL_CONNECTED){
+    Serial.println("Reconnecting..");
+    WiFi.reconnect();
+    delay(5000);     
+  } 
 
 //Gyro
   IMU.update();
@@ -132,8 +125,9 @@ void loop() {
   uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey); 
   while ( uploadStatus != 200){
     Serial.println("Problem updating gyro channel. HTTP error code " + String(uploadStatus));
+    WiFi.reconnect();
+    delay(1000);
     uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey);
-    delay(10);
   }
   Serial.println("Gyro Channel update successful.");
 
@@ -149,8 +143,9 @@ void loop() {
     uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey);
     while (uploadStatus != 200){
       Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));
+      WiFi.reconnect();
+      delay(1000);
       uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey);
-      delay(10);
     }
     Serial.println("PM Channel update successful.");
 
@@ -158,17 +153,21 @@ void loop() {
     if (RRH_sensor.status_fan_malfunction) {ThingSpeak.setField(7, 1);} //This will be sent to the next channel which is gyro 
       
     if (RRH_sensor.status_dust_accumulation) {
-      
+      RRH_sensor.triggerManualCleaning();
     }
   }
 //Sleep
-  delay(100); //Add delay to make sure serial printing is done
+  delay(1000); //Add delay to make sure serial printing is done
+  client.stop();  //Close TCP connection
 
   esp_sleep_enable_timer_wakeup(sleepTime);
     
   // Pause CPU execution while keeping Wi-Fi alive
   esp_light_sleep_start(); 
   // Execution resumes directly HERE after sleeping
+
+  //Allow WiFi handshake to rerun
+  delay(7000); 
 
 }
 

@@ -14,6 +14,12 @@ RRH62000::RRH62000(uint8_t address) {
     pm1_0_smoke = pm2_5_smoke = pm10_0_smoke = 0.0f;
     temperature = humidity = iaq = 0.0f;
     tvoc = eco2 = 0;
+
+    mox_resistance = 0;
+    tvoc_cleaning_done = false;
+    memset(unique_id, 0, sizeof(unique_id));
+    memset(algo_version, 0, sizeof(algo_version));
+    memset(firmware_version, 0, sizeof(firmware_version));
 }
 
 bool RRH62000::begin(int sdaPin, int sclPin, uint32_t frequency, TwoWire &wirePort) {
@@ -35,7 +41,6 @@ bool RRH62000::begin(int sdaPin, int sclPin, uint32_t frequency, TwoWire &wirePo
     _wire->beginTransmission(_address);
     return (_wire->endTransmission() == 0);
 }
-
 
 bool RRH62000::isDataReady() {
     _wire->beginTransmission(_address);
@@ -107,12 +112,24 @@ bool RRH62000::readSensor() {
     return true;
 }
 
-// --- Helper Register Writer ---
-bool RRH62000::writeRegister(uint8_t reg, uint8_t value) {
-    _wire->beginTransmission(_address);
-    _wire->write(reg);
-    _wire->write(value);
-    return (_wire->endTransmission() == 0);
+// Command 0x50: Put module into sleep mode
+bool RRH62000::sleep() {
+    return writeRegister(0x50, 0x00);
+}
+
+// Command 0x50: Wake module up
+bool RRH62000::wakeUp() {
+    return writeRegister(0x50, 0x80);
+}
+
+// Command 0x51: Manually start fan dust-cleaning process
+bool RRH62000::triggerManualCleaning() {
+    return writeRegister(0x51, 0x01);
+}
+
+// Command 0x52: Trigger a software reset (same as power-on reset)
+bool RRH62000::resetModule() {
+    return writeRegister(0x52, 0x81);
 }
 
 // Set Moving Average filter length (1 to 60 samples)
@@ -142,6 +159,58 @@ bool RRH62000::setCleaningTime(uint8_t seconds) {
 bool RRH62000::setFanSpeed(uint8_t speedPercent) {
     if (speedPercent < 60 || speedPercent > 100) return false;
     return writeRegister(0x63, speedPercent); // Reg 0x63 SPEEDFAN
+}
+
+// Command 0x71: Read MOX[6] resistance (4 Bytes)
+bool RRH62000::readMoxResistance() {
+    uint8_t buf[4];
+    if (!readRegisterBytes(0x71, buf, 4)) return false;
+    mox_resistance = ((uint32_t)buf[0] << 24) | ((uint32_t)buf[1] << 16) | ((uint32_t)buf[2] << 8) | buf[3];
+    return true;
+}
+
+// Command 0x72: Read Unique Hardware ID (6 Bytes)
+bool RRH62000::readUniqueID() {
+    return readRegisterBytes(0x72, unique_id, 6);
+}
+
+// Command 0x73: Read Algorithm Version (3 Bytes: Major, Minor, Patch)
+bool RRH62000::readAlgorithmVersion() {
+    return readRegisterBytes(0x73, algo_version, 3);
+}
+
+// Command 0x74: Read TVOC sensor cleaning status (1 Byte)
+bool RRH62000::readCleaningStatus() {
+    uint8_t statusByte = 0;
+    if (!readRegisterBytes(0x74, &statusByte, 1)) return false;
+    tvoc_cleaning_done = (statusByte == 0x01);
+    return true;
+}
+
+// Command 0x75: Read Firmware Version (2 Bytes: Major, Minor)
+bool RRH62000::readFirmwareVersion() {
+    return readRegisterBytes(0x75, firmware_version, 2);
+}
+
+// --- Helper Register Writer ---
+bool RRH62000::writeRegister(uint8_t reg, uint8_t value) {
+    _wire->beginTransmission(_address);
+    _wire->write(reg);
+    _wire->write(value);
+    return (_wire->endTransmission() == 0);
+}
+
+bool RRH62000::readRegisterBytes(uint8_t reg, uint8_t *buffer, size_t length) {
+    _wire->beginTransmission(_address);
+    _wire->write(reg);
+    if (_wire->endTransmission() != 0) return false;
+
+    if (_wire->requestFrom(_address, (uint8_t)length) != length) return false;
+
+    for (size_t i = 0; i < length; i++) {
+        buffer[i] = _wire->read();
+    }
+    return true;
 }
 
 // CRC-8 calculation (Polynomial: 0x31, Init: 0xFF, No reflect, No final XOR)

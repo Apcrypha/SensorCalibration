@@ -18,9 +18,6 @@ const char * PM_WriteAPIKey = "xxxxx";
 unsigned long statusChannel_ID = 1111;
 const char * statusWriteAPIKey = "xxxxx";
 
-unsigned long lastUploadTime = 0;
-uint16_t uploadInterval = 16000; //in ms
-
 int uploadStatus;
 
 
@@ -31,7 +28,6 @@ int uploadStatus;
 #define RRH_SCL 22
 
 #define samplingTime 180000 //Sampling interval should be (MovingAverage * 3) * 1000
-unsigned long lastSampledTime = 0;
 
 RRH62000 RRH_sensor;
 
@@ -48,6 +44,12 @@ MPU6500 IMU;              // Create MPU6500 FastIMU instance
 calData calib = { 0 };    // Calibration struct (zero-initialized if uncalibrated)
 AccelData accelData;
 GyroData gyroData;
+
+//-------------------------------------Sleep----------------------
+#include "esp_wifi.h"
+#include "esp_sleep.h"
+
+const uint64_t sleepTime = 180ULL * 1000000ULL; // Must be in ms. Must use Unsigned Long Long(ULL) since its in 64bit. Format is (seconds * ms/s)
 
 
 void setup() {
@@ -98,80 +100,76 @@ void setup() {
 
 //Thingspeak
   ThingSpeak.begin(client);  // Initialize ThingSpeak
-
 }
 
+
 void loop() {
-unsigned long currentMillis = millis();
 
 //ThingSpeak
-  if (currentMillis - lastUploadTime >= uploadInterval) {
-    lastUploadTime = currentMillis;
+  //Ensure WiFi is connected
+  if(WiFi.status() != WL_CONNECTED){
+    Serial.print("Connecting.....");
+    while(WiFi.status() != WL_CONNECTED){
+      WiFi.begin(ssid, password); 
+      delay(5000);     
+    } 
+    Serial.println("\nConnected.");
+  }
 
-    //Ensure WiFi is connected
-    if(WiFi.status() != WL_CONNECTED){
-      Serial.print("Connecting.....");
-      while(WiFi.status() != WL_CONNECTED){
-        WiFi.begin(ssid, password); 
-        delay(5000);     
-      } 
-      Serial.println("\nConnected.");
-    }
-
-    //Gyro
-    IMU.update();
-    IMU.getAccel(&accelData);
-    IMU.getGyro(&gyroData);
+//Gyro
+  IMU.update();
+  IMU.getAccel(&accelData);
+  IMU.getGyro(&gyroData);
     
-    // set the fields with the values
-    ThingSpeak.setField(1,accelData.accelX);
-    ThingSpeak.setField(2,accelData.accelY);
-    ThingSpeak.setField(3,accelData.accelZ);
-    ThingSpeak.setField(4,gyroData.gyroX);
-    ThingSpeak.setField(5,gyroData.gyroY);
-    ThingSpeak.setField(6,gyroData.gyroZ);
+  // set the fields with the values
+  ThingSpeak.setField(1,accelData.accelX);
+  ThingSpeak.setField(2,accelData.accelY);
+  ThingSpeak.setField(3,accelData.accelZ);
+  ThingSpeak.setField(4,gyroData.gyroX);
+  ThingSpeak.setField(5,gyroData.gyroY);
+  ThingSpeak.setField(6,gyroData.gyroZ);
+
+  uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey); 
+  while ( uploadStatus != 200){
+    Serial.println("Problem updating gyro channel. HTTP error code " + String(uploadStatus));
+    uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey);
+    delay(10);
+  }
+  Serial.println("Gyro Channel update successful.");
+
+//PM    
+  if (RRH_sensor.readSensor()) {
+    ThingSpeak.setField(1,RRH_sensor.temperature);
+    ThingSpeak.setField(2,RRH_sensor.humidity);
+    ThingSpeak.setField(3,RRH_sensor.pm10_0_kcl);
+    ThingSpeak.setField(4,RRH_sensor.pm10_0_smoke);
+    ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
+    ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
 
     uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey);
-    if(uploadStatus == 200){Serial.println("Gyro Channel update successful.");    }
-    else{Serial.println("Problem updating gyro channel. HTTP error code " + String(uploadStatus));    }
-    
-    delay (1000);
-  }
+    while (uploadStatus != 200){
+      Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));
+      uploadStatus = ThingSpeak.writeFields(gyroChannel_ID, gyroWriteAPIKey);
+      delay(10);
+    }
+    Serial.println("PM Channel update successful.");
 
-  if (currentMillis - lastSampledTime >= samplingTime) {
-    lastSampledTime = currentMillis;
-
-    if (RRH_sensor.readSensor()) {
-
-      //PM
-      ThingSpeak.setField(1,RRH_sensor.temperature);
-      ThingSpeak.setField(2,RRH_sensor.humidity);
-      ThingSpeak.setField(3,RRH_sensor.pm10_0_kcl);
-      ThingSpeak.setField(4,RRH_sensor.pm10_0_smoke);
-      ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
-      ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
-
-      uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
-      if(uploadStatus == 200){Serial.println("PM Channel update successful.");    }
-      else{Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));    }
+   //Status
+    if (RRH_sensor.status_fan_malfunction) {ThingSpeak.setField(7, 1);} //This will be sent to the next channel which is gyro 
       
-      delay(1000);
-
-      //Status
-      if (RRH_sensor.status_fan_malfunction) {
-        ThingSpeak.setField(1, 1);} else{
-          ThingSpeak.setField(1, 0);      }
-
-      if (RRH_sensor.status_dust_accumulation) {
-        ThingSpeak.setField(2, 1);} else{
-          ThingSpeak.setField(2, 0);      }
-
-      uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
-      if(uploadStatus == 200){Serial.println("PM Channel update successful.");    }
-      else{Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));    }
-
+    if (RRH_sensor.status_dust_accumulation) {
+      
     }
   }
+//Sleep
+  delay(100); //Add delay to make sure serial printing is done
+
+  esp_sleep_enable_timer_wakeup(sleepTime);
+    
+  // Pause CPU execution while keeping Wi-Fi alive
+  esp_light_sleep_start(); 
+  // Execution resumes directly HERE after sleeping
+
 }
 
 

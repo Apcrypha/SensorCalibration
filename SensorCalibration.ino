@@ -1,6 +1,6 @@
 //#define RRH_debug 
-//#define Complete_run
-#define Complete_serial
+#define Complete_run
+//#define Complete_serial
 
 
 //-------------------------------------WiFi-----------------------
@@ -78,7 +78,7 @@ void setup() {
   // Configure module parameters via I2C
   RRH_sensor.setMovingAverage(60);          // Sampling interval should be MovingAverage * 3 
   RRH_sensor.setCleaningInterval(2880);     // Set auto-cleaning interval (2880 * 30s = 24 hours)
-  RRH_sensor.setCleaningTime(15);           // Run fan cleaning for 15 seconds
+  RRH_sensor.setCleaningTime(30);           // Run fan cleaning for 15 seconds
   RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
 
   Serial.println("RRH62000 Working");
@@ -177,6 +177,8 @@ void loop() {
       ThingSpeak.setField(4,RRH_sensor.pm10_0_smoke);
       ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
       ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
+      ThingSpeak.setField(7,RRH_sensor.pm1_0_kcl);
+      ThingSpeak.setField(8,RRH_sensor.pm1_0_smoke);
 
       uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
       while (uploadStatus != 200){

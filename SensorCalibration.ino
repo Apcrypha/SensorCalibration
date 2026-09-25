@@ -380,10 +380,10 @@ void loop() {
     roll = 0.96 * (roll + gyroData.gyroX * Gyro_samplingTime) + 0.04 * accelRoll;
     pitch = 0.96 * (pitch + gyroData.gyroY * Gyro_samplingTime) + 0.04 * accelPitch;
 
-    Serial.print("Pitch:"); Serial.print(pitch, 3); Serial.print(",");  Serial.print("Roll:"); Serial.println(roll, 3);
-    Serial.print("temp:"); Serial.print(RRH_sensor.temperature, 3); Serial.print(",");  Serial.print("RH:"); Serial.print(RRH_sensor.humidity, 3);
-    Serial.print("PM10KCL:"); Serial.print(RRH_sensor.pm10_0_kcl, 3); Serial.print(",");  Serial.print("PM10smk:"); Serial.print(RRH_sensor.pm10_0_smoke, 3);
-    Serial.print("PM2.5KCL:"); Serial.print(RRH_sensor.pm2_5_kcl, 3); Serial.print(",");  Serial.print("PM2.5smk:"); Serial.print(RRH_sensor.pm2_5_smoke, 3);    
+    Serial.print("Pitch:"); Serial.print(pitch, 3); Serial.print(",");  Serial.print("Roll:"); Serial.print(roll, 3); Serial.print(","); Serial.print("Tilt:"); Serial.print(tilt); Serial.print(",");
+    Serial.print("temp:"); Serial.print(RRH_sensor.temperature, 3); Serial.print(",");  Serial.print("RH:"); Serial.print(RRH_sensor.humidity, 3);  Serial.print(",");
+    Serial.print("PM10KCL:"); Serial.print(RRH_sensor.pm10_0_kcl, 3); Serial.print(",");  Serial.print("PM10smk:"); Serial.print(RRH_sensor.pm10_0_smoke, 3); Serial.print(",");
+    Serial.print("PM2.5KCL:"); Serial.print(RRH_sensor.pm2_5_kcl, 3); Serial.print(",");  Serial.print("PM2.5smk:"); Serial.println(RRH_sensor.pm2_5_smoke, 3);    
 
     if(abs(roll) >= rollThreshold || abs(pitch) >= pitchThreshold){
       tilt = 1;
@@ -397,46 +397,9 @@ void loop() {
   if(currentMillis - lastSampleMillis >= RRH_samplingTime){
     lastSampleMillis = currentMillis;
 
-    if (RRH_sensor.readSensor()) {
-      ThingSpeak.setField(1,RRH_sensor.temperature);
-      ThingSpeak.setField(2,RRH_sensor.humidity);
-      ThingSpeak.setField(3,RRH_sensor.pm10_0_kcl);
-      ThingSpeak.setField(4,RRH_sensor.pm10_0_smoke);
-      ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
-      ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
+    RRH_sensor.readSensor();
 
-      uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
-      while (uploadStatus != 200){
-        Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));
-        WiFi.reconnect();
-        delay(1000);
-        uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
-      }
-      Serial.println("PM Channel update successful.");
-
-    //Status
-      if (RRH_sensor.status_fan_malfunction) {
-        ThingSpeak.setField(2, 1);//1 is broken fan, 0 is ok
-        uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
-        while ( uploadStatus != 200){
-          Serial.println("Problem updating Status channel: Field 2. HTTP error code " + String(uploadStatus));
-          WiFi.reconnect();
-          delay(1000);
-          uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
-        }
-        Serial.println("Status Channel: Field 2 update successful.");
-      } 
-        
-      if (RRH_sensor.status_dust_accumulation) {
-        RRH_sensor.triggerManualCleaning();
-      }
-
-    }
   }
-
-
-
-
 }
 
 #endif

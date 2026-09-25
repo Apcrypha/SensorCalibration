@@ -1,5 +1,6 @@
-#define RRH_debug 
+//#define RRH_debug 
 //#define Complete_run
+#define Complete_serial
 
 
 //-------------------------------------WiFi-----------------------
@@ -46,11 +47,12 @@ GyroData gyroData;
 #define Gyro_samplingTime 0.02f //in Seconds
 
 // Filtered angle variables
-float pitch = 0.0;
-float roll = 0.0;
+float pitch = 0.0;  //X axis in degrees
+float roll = 0.0;   //Y axis in degrees
 
-float pitchThreshold = 100.0;
-float rollThreshold = 100.0;
+//in degrees
+float pitchThreshold = 50.0;
+float rollThreshold = 50.0;
 
 //-------------------------------------Timing-----------------------
 unsigned long lastSampleMicros = 0;
@@ -142,8 +144,8 @@ void loop() {
 
     // 2. Complementary Filter
     // 96% Gyro integration + 4% Accelerometer anchor
-    roll = 0.96 * (roll + gyroData.gyroX * dt) + 0.04 * accelRoll;
-    pitch = 0.96 * (pitch + gyroData.gyroY * dt) + 0.04 * accelPitch;
+    roll = 0.96 * (roll + gyroData.gyroX * Gyro_samplingTime) + 0.04 * accelRoll;
+    pitch = 0.96 * (pitch + gyroData.gyroY * Gyro_samplingTime) + 0.04 * accelPitch;
 
     if(abs(roll) >= rollThreshold || abs(pitch) >= pitchThreshold){
       if(currentMillis - lastStatusMillis >= 16){//16 is for the 15seconds thingspeak interval of free plan
@@ -212,6 +214,7 @@ void loop() {
 
 
 //-----------------------------------------------------------------------------------------------------------RRH Debug------------------------------------------------------------------------------
+//RRH with thingspeak
 
 #ifdef RRH_debug
 void setup() {
@@ -306,6 +309,136 @@ void loop() {
 
 #endif
 
+//-----------------------------------------------------------------------------------------------------------Complete Serial------------------------------------------------------------------------------
+//Comple code but Serial only
 
+#ifdef Complete_serial
+
+int tilt = 0; 
+void setup() {
+  Serial.begin(115200); 
+  Serial.println("\n\n\n------------Complete Serial------------");
+
+//RRH62000  
+  if (!RRH_sensor.begin(SDA_PIN, SCL_PIN)) {
+    Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
+    while (!RRH_sensor.begin(SDA_PIN, SCL_PIN)){
+      Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
+      delay(1000);
+    }
+  }
+
+  // Configure module parameters via I2C
+  RRH_sensor.setMovingAverage(60);          // Sampling interval should be MovingAverage * 3 
+  RRH_sensor.setCleaningInterval(2880);     // Set auto-cleaning interval (2880 * 30s = 24 hours)
+  RRH_sensor.setCleaningTime(15);           // Run fan cleaning for 15 seconds
+  RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
+
+  Serial.println("RRH62000 Working");
+
+//Gyro
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.setClock(400000);  // 400 kHz Fast I2C bus
+
+  // Initialize MPU6500
+  int err = IMU.init(calib, IMU_ADDRESS);
+  if (err != 0) {
+    Serial.print("Error initializing MPU6500. Code: ");
+    Serial.println(err);
+    while (true);
+  }
+
+  // Set measurement range limits
+  IMU.setAccelRange(8);   // Options: 2, 4, 8, 16 (g)
+  IMU.setGyroRange(500);  // Options: 250, 500, 1000, 2000 (deg/s)
+  
+  Serial.println("IMU Working");
+
+  delay(2000);
+}
+
+
+void loop() {
+
+  unsigned long currentMicros = micros();
+  unsigned long currentMillis = millis();
+
+//Gyro
+  if(currentMicros - lastSampleMicros >= Gyro_samplingTime){
+    lastSampleMicros = currentMicros;
+
+    IMU.update();
+    IMU.getAccel(&accelData);
+    IMU.getGyro(&gyroData);
+    
+    // 1. Calculate Roll and Pitch from Accelerometer
+    float accelRoll = atan2(accelData.accelY, accelData.accelZ) * 180.0 / M_PI;
+    float accelPitch = atan2(-accelData.accelX, sqrt(accelData.accelY * accelData.accelY + accelData.accelZ * accelData.accelZ)) * 180.0 / M_PI;
+
+    // 2. Complementary Filter
+    // 96% Gyro integration + 4% Accelerometer anchor
+    roll = 0.96 * (roll + gyroData.gyroX * Gyro_samplingTime) + 0.04 * accelRoll;
+    pitch = 0.96 * (pitch + gyroData.gyroY * Gyro_samplingTime) + 0.04 * accelPitch;
+
+    Serial.print("Pitch:"); Serial.print(pitch, 3); Serial.print(",");  Serial.print("Roll:"); Serial.println(roll, 3);
+    Serial.print("temp:"); Serial.print(RRH_sensor.temperature, 3); Serial.print(",");  Serial.print("RH:"); Serial.print(RRH_sensor.humidity, 3);
+    Serial.print("PM10KCL:"); Serial.print(RRH_sensor.pm10_0_kcl, 3); Serial.print(",");  Serial.print("PM10smk:"); Serial.print(RRH_sensor.pm10_0_smoke, 3);
+    Serial.print("PM2.5KCL:"); Serial.print(RRH_sensor.pm2_5_kcl, 3); Serial.print(",");  Serial.print("PM2.5smk:"); Serial.print(RRH_sensor.pm2_5_smoke, 3);    
+
+    if(abs(roll) >= rollThreshold || abs(pitch) >= pitchThreshold){
+      tilt = 1;
+    }
+    else{
+      tilt = 0;
+    }
+  }
+
+//PM
+  if(currentMillis - lastSampleMillis >= RRH_samplingTime){
+    lastSampleMillis = currentMillis;
+
+    if (RRH_sensor.readSensor()) {
+      ThingSpeak.setField(1,RRH_sensor.temperature);
+      ThingSpeak.setField(2,RRH_sensor.humidity);
+      ThingSpeak.setField(3,RRH_sensor.pm10_0_kcl);
+      ThingSpeak.setField(4,RRH_sensor.pm10_0_smoke);
+      ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
+      ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
+
+      uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
+      while (uploadStatus != 200){
+        Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));
+        WiFi.reconnect();
+        delay(1000);
+        uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
+      }
+      Serial.println("PM Channel update successful.");
+
+    //Status
+      if (RRH_sensor.status_fan_malfunction) {
+        ThingSpeak.setField(2, 1);//1 is broken fan, 0 is ok
+        uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
+        while ( uploadStatus != 200){
+          Serial.println("Problem updating Status channel: Field 2. HTTP error code " + String(uploadStatus));
+          WiFi.reconnect();
+          delay(1000);
+          uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
+        }
+        Serial.println("Status Channel: Field 2 update successful.");
+      } 
+        
+      if (RRH_sensor.status_dust_accumulation) {
+        RRH_sensor.triggerManualCleaning();
+      }
+
+    }
+  }
+
+
+
+
+}
+
+#endif
 
 

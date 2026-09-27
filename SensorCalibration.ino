@@ -148,17 +148,16 @@ void loop() {
     pitch = 0.96 * (pitch + gyroData.gyroY * Gyro_samplingTime) + 0.04 * accelPitch;
 
     if(abs(roll) >= rollThreshold || abs(pitch) >= pitchThreshold){
-      if(currentMillis - lastStatusMillis >= 16){//16 is for the 15seconds thingspeak interval of free plan
+      if(currentMillis - lastStatusMillis >= 16000){//16 is for the 15seconds thingspeak interval of free plan
         lastStatusMillis = currentMillis;
         // set the fields with the values
         ThingSpeak.setField(1, 1); // 1 for system tilted, 0 for ok
-
 
         uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey); 
         while ( uploadStatus != 200){
           Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
           WiFi.reconnect();
-          delay(1000);
+          delay(3000);
           uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
         }
         Serial.println("Status Channel: Field 1 update successful.");
@@ -184,7 +183,7 @@ void loop() {
       while (uploadStatus != 200){
         Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));
         WiFi.reconnect();
-        delay(1000);
+        delay(3000);
         uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
       }
       Serial.println("PM Channel update successful.");
@@ -196,7 +195,7 @@ void loop() {
         while ( uploadStatus != 200){
           Serial.println("Problem updating Status channel: Field 2. HTTP error code " + String(uploadStatus));
           WiFi.reconnect();
-          delay(1000);
+          delay(3000);
           uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
         }
         Serial.println("Status Channel: Field 2 update successful.");
@@ -208,7 +207,6 @@ void loop() {
 
     }
   }
-
 
 }
 

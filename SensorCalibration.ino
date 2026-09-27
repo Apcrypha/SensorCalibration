@@ -23,10 +23,17 @@ WiFiClient  client;
 int uploadStatus;
 
 uint8_t systemStatus = 0;  
-/*  Bit masking for Air monitoring Status
-      Bit   |      Meaning
-      0     |   System Capsized
-      1     |   Fan Malfunction
+/*  
+******Bit masking for Air monitoring Status******
+        | BIT    |       MEANING        |
+        |  0     |   System Capsized    |
+        |  1     |   Fan Malfunction    |
+        |  2     |         -            |
+        |  3     |         -            |
+        |  4     |         -            |
+        |  5     |         -            |
+        |  6     |         -            |
+        |  7     |         -            |
 */
 //-------------------------------------RRH62000-------------------
 #include "RRH62000.h"

@@ -8,21 +8,26 @@
 
 WiFiClient  client;
 
-const char* ssid = "Teenage Nigga Turtles";    
-const char* password = "Nigga_Bazooka";   
+#define SSID "Teenage Nigga Turtles"    
+#define PASSWORD "Nigga_Bazooka"   
 
 //-------------------------------------Thingspeak-----------------
 #include "ThingSpeak.h" //Thingspeak by mathworks
 
-unsigned long statusChannel_ID = 3498647;
-const char * statusWriteAPIKey = "W6I9KNG5O1F41071";
+#define STATUS_CHANNEL_ID 3498647U
+#define STATUS_WRITE_API_KEY "W6I9KNG5O1F41071"
 
-unsigned long PM_Channel_ID = 3506848;
-const char * PM_WriteAPIKey = "ZDEWLBAPYNDSP98U";
+#define PM_CHANNEL_ID 3506848U
+#define PM_WRITE_API_KEY "ZDEWLBAPYNDSP98U"
 
 int uploadStatus;
 
-
+int systemStatus = 0;  
+/*  Bit masking for Air monitoring Status
+      Bit   |      Meaning
+      0     |   System Capsized
+      1     |   Fan Malfunction
+*/
 //-------------------------------------RRH62000-------------------
 #include "RRH62000.h"
 
@@ -51,8 +56,7 @@ float pitch = 0.0;  //X axis in degrees
 float roll = 0.0;   //Y axis in degrees
 
 //in degrees
-float pitchThreshold = 50.0;
-float rollThreshold = 50.0;
+#define tiltThreshold 50.0f
 
 //-------------------------------------Timing-----------------------
 unsigned long lastSampleMicros = 0;
@@ -106,7 +110,7 @@ void setup() {
   
   Serial.print("Attempting to connect");
   while(WiFi.status() != WL_CONNECTED){
-    WiFi.begin(ssid, password); 
+    WiFi.begin(SSID, PASSWORD); 
     delay(5000);     
   } 
   Serial.println("\nConnected.");
@@ -147,21 +151,11 @@ void loop() {
     roll = 0.96 * (roll + gyroData.gyroX * Gyro_samplingTime) + 0.04 * accelRoll;
     pitch = 0.96 * (pitch + gyroData.gyroY * Gyro_samplingTime) + 0.04 * accelPitch;
 
-    if(abs(roll) >= rollThreshold || abs(pitch) >= pitchThreshold){
-      if(currentMillis - lastStatusMillis >= 16000){//16 is for the 15seconds thingspeak interval of free plan
-        lastStatusMillis = currentMillis;
-        // set the fields with the values
-        ThingSpeak.setField(1, 1); // 1 for system tilted, 0 for ok
-
-        uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey); 
-        while ( uploadStatus != 200){
-          Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
-          WiFi.reconnect();
-          delay(3000);
-          uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
-        }
-        Serial.println("Status Channel: Field 1 update successful.");
-      }
+    if(abs(roll) >= tiltThreshold || abs(pitch) >= tiltThreshold){
+      systemStatus |= 1<<0; //Forces bit 0 to 1
+    }
+    else{
+      systemStatus &= ~(1<<0); //Forces bit 0 to 0
     }
   }
 
@@ -179,28 +173,22 @@ void loop() {
       ThingSpeak.setField(7,RRH_sensor.pm1_0_kcl);
       ThingSpeak.setField(8,RRH_sensor.pm1_0_smoke);
 
-      uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
+      uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
       while (uploadStatus != 200){
         Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));
         WiFi.reconnect();
         delay(3000);
-        uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
+        uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
       }
       Serial.println("PM Channel update successful.");
 
     //Status
       if (RRH_sensor.status_fan_malfunction) {
-        ThingSpeak.setField(2, 1);//1 is broken fan, 0 is ok
-        uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
-        while ( uploadStatus != 200){
-          Serial.println("Problem updating Status channel: Field 2. HTTP error code " + String(uploadStatus));
-          WiFi.reconnect();
-          delay(3000);
-          uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
-        }
-        Serial.println("Status Channel: Field 2 update successful.");
+        systemStatus |= 1 << 1; //Forces bit 1 to 1
       } 
-        
+      else{
+        systemStatus &= ~(1 << 1);  //Forces bit 1 to 0
+      }
       if (RRH_sensor.status_dust_accumulation) {
         RRH_sensor.triggerManualCleaning();
       }
@@ -208,6 +196,20 @@ void loop() {
     }
   }
 
+//Status
+  if(currentMillis - lastStatusMillis >= 16000){//16 is for the 15seconds thingspeak interval of free plan
+    lastStatusMillis = currentMillis;
+    // set the fields with the values
+    ThingSpeak.setField(1, systemStatus); 
+    uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY); 
+    while ( uploadStatus != 200){
+      Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
+      WiFi.reconnect();
+      delay(3000);
+      uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
+    }
+    Serial.println("Status Channel: Field 1 update successful.");
+  }
 }
 
 #endif
@@ -243,7 +245,7 @@ void setup() {
   
   Serial.print("Attempting to connect");
   while(WiFi.status() != WL_CONNECTED){
-    WiFi.begin(ssid, password); 
+    WiFi.begin(SSID, PASSWORD); 
     delay(5000);     
   } 
   Serial.println("\nConnected.");
@@ -276,24 +278,24 @@ void loop() {
       ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
       ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
 
-      uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
+      uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
       while (uploadStatus != 200){
         Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));
         WiFi.reconnect();
         delay(1000);
-        uploadStatus = ThingSpeak.writeFields(PM_Channel_ID, PM_WriteAPIKey);
+        uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
       }
       Serial.println("PM Channel update successful.");
 
     //Status
       if (RRH_sensor.status_fan_malfunction) {
         ThingSpeak.setField(2, 1);//1 is broken fan, 0 is ok
-        uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
+        uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
         while ( uploadStatus != 200){
           Serial.println("Problem updating Status channel: Field 2. HTTP error code " + String(uploadStatus));
           WiFi.reconnect();
           delay(1000);
-          uploadStatus = ThingSpeak.writeFields(statusChannel_ID, statusWriteAPIKey);
+          uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
         }
         Serial.println("Status Channel: Field 2 update successful.");
       } 

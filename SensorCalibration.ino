@@ -98,7 +98,7 @@ unsigned long lastStatusMillis = 0; //For status
 
   //Gyro
     Wire.begin(SDA_PIN, SCL_PIN);
-    Wire.setClock(400000);  // 400 kHz Fast I2C bus
+    Wire.setClock(100000);  
 
     // Initialize MPU6500
     int err = IMU.init(calib, IMU_ADDRESS);
@@ -143,7 +143,7 @@ unsigned long lastStatusMillis = 0; //For status
     } 
 
    //Gyro
-    if(currentMicros - lastSampleMicros >= (GYRO_SAMPLING_TIME * 100000) ){// 100,000 is seconds to microseconds conversion
+    if(currentMicros - lastSampleMicros >= (GYRO_SAMPLING_TIME * 1000000) ){// 1,000,000 is seconds to microseconds conversion
       lastSampleMicros = currentMicros;
 
       IMU.update();
@@ -183,7 +183,9 @@ unsigned long lastStatusMillis = 0; //For status
 
         uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
         while (uploadStatus != 200){
-          Serial.println("Problem updating PM channel. HTTP error code " + String(uploadStatus));
+          Serial.print("Problem updating PM channel. HTTP error code ");
+          Serial.println(uploadStatus);
+          
           WiFi.reconnect();
           delay(3000);
           uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);

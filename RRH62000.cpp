@@ -68,9 +68,7 @@ bool RRH62000::readSensor() {
         return false;
     }
 
-    for (int i = 0; i < 37; i++) {
-        buffer[i] = _wire->read();
-    }
+    _wire->readBytes(buffer, 37);
 
     // Validate CRC8 over bytes 0 to 35 against byte 36
     uint8_t calculatedCRC = calculateCRC8(buffer, 36);

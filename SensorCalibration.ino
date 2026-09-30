@@ -8,8 +8,8 @@
 
 WiFiClient  client;
 
-#define SSID "Teenage Nigga Turtles"    
-#define PASSWORD "Nigga_Bazooka"   
+#define SSID "MightyBreadboard"    
+#define PASSWORD "Mighty_Breadboard"   
 
 //-------------------------------------Thingspeak-----------------
 #include "ThingSpeak.h" //Thingspeak by mathworks
@@ -206,18 +206,20 @@ unsigned long lastStatusMillis = 0; //For status
     }
 
    //Status
-    if(currentMillis - lastStatusMillis >= (STATUS_INTERVAL * 1000) ){  //1,000 is seconds to milliseconds conversion
-      lastStatusMillis = currentMillis;
-      // set the fields with the values
-      ThingSpeak.setField(1, systemStatus); 
-      uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY); 
-      while ( uploadStatus != 200){
-        Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
-        WiFi.reconnect();
-        delay(3000);
-        uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
+    if(systemStatus){ // != 0, wwhich means it has an error
+      if(currentMillis - lastStatusMillis >= (STATUS_INTERVAL * 1000) ){  //1,000 is seconds to milliseconds conversion
+        lastStatusMillis = currentMillis;
+        // set the fields with the values
+        ThingSpeak.setField(1, systemStatus); 
+        uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY); 
+        while ( uploadStatus != 200){
+          Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
+          WiFi.reconnect();
+          delay(3000);
+          uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
+        }
+        Serial.println("Status Channel: Field 1 update successful.");
       }
-      Serial.println("Status Channel: Field 1 update successful.");
     }
   }
 

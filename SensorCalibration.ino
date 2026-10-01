@@ -8,8 +8,8 @@
 
 WiFiClient  client;
 
-#define SSID "MightyBreadboard"    
-#define PASSWORD "Mighty_Breadboard"   
+#define SSID "MightBreadboard"    //House WiFi: Teenage Nigga Turtles   | Pocket WiFi: MightBreadboard
+#define PASSWORD "Mighty_Breadboard"        //House WiFi: Nigga_Bazooka           | Pocket WiFi: Mighty_Breadboard
 
 //-------------------------------------Thingspeak-----------------
 #include "ThingSpeak.h" //Thingspeak by mathworks
@@ -56,7 +56,7 @@ calData calib = { 0 };    // Calibration struct (zero-initialized if uncalibrate
 AccelData accelData;
 GyroData gyroData;
 
-#define GYRO_SAMPLING_TIME 0.02f //in Seconds
+#define GYRO_SAMPLING_TIME ((unsigned long)(0.02f * 1000000)) // must be in microseconds.the Float type is in seconds. 1,000,000 is seconds to microseconds conversion
 
 // Filtered angle variables
 float pitch = 0.0;  //X axis in degrees
@@ -65,12 +65,24 @@ float roll = 0.0;   //Y axis in degrees
 //in degrees
 #define TILT_THRESHOLD 50.0f
 
-//-------------------------------------Timing-----------------------
+//-------------------------------------Timing---------------------
 unsigned long lastSampleMicros = 0; //For gyro
 unsigned long lastSampleMillis = 0; //For PM
 unsigned long lastStatusMillis = 0; //For status
 
 #define STATUS_INTERVAL 16 //in seconds. the interval on status update
+
+
+//-------------------------------------Status LED-----------------
+#define PM_LED_Sent_Ok 14
+#define PM_LED_Sent_Err 13
+#define RRH_LED_Connected 18
+
+#define Status_LED_Sent_Ok 17
+#define Status_LED_Sent_Err 16
+
+#define Gyro_LED_Connected 19
+#define WiFi_LED_Connected 4
 
 //-----------------------------------------------------------------------------------------------------------Complete Run------------------------------------------------------------------------------
 
@@ -83,6 +95,7 @@ unsigned long lastStatusMillis = 0; //For status
     if (!RRH_sensor.begin(SDA_PIN, SCL_PIN)) {
       Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
       while (!RRH_sensor.begin(SDA_PIN, SCL_PIN)){
+        digitalWrite(RRH_LED_Connected, HIGH);
         Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
         delay(1000);
       }
@@ -94,6 +107,7 @@ unsigned long lastStatusMillis = 0; //For status
     RRH_sensor.setCleaningTime(30);           // Run fan cleaning for 15 seconds
     RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
 
+    digitalWrite(RRH_LED_Connected, LOW);
     Serial.println("RRH62000 Working");
 
   //Gyro
@@ -102,16 +116,19 @@ unsigned long lastStatusMillis = 0; //For status
 
     // Initialize MPU6500
     int err = IMU.init(calib, IMU_ADDRESS);
-    if (err != 0) {
+    while (err != 0) {
+      digitalWrite(Gyro_LED_Connected, HIGH);
       Serial.print("Error initializing MPU6500. Code: ");
       Serial.println(err);
-      while (true);
+      err = IMU.init(calib, IMU_ADDRESS);
+      delay(2000);
     }
-
+    
     // Set measurement range limits
     IMU.setAccelRange(8);   // Options: 2, 4, 8, 16 (g)
     IMU.setGyroRange(500);  // Options: 250, 500, 1000, 2000 (deg/s)
     
+    digitalWrite(Gyro_LED_Connected, LOW);
     Serial.println("IMU Working");
 
   //WiFi
@@ -119,9 +136,11 @@ unsigned long lastStatusMillis = 0; //For status
     
     Serial.print("Attempting to connect");
     while(WiFi.status() != WL_CONNECTED){
+      digitalWrite(WiFi_LED_Connected, HIGH);
       WiFi.begin(SSID, PASSWORD); 
       delay(5000);     
     } 
+    digitalWrite(WiFi_LED_Connected, LOW);
     Serial.println("\nConnected.");
     
   //Thingspeak
@@ -137,13 +156,15 @@ unsigned long lastStatusMillis = 0; //For status
 
    //Ensure WiFi is connected
     while(WiFi.status() != WL_CONNECTED){
+      digitalWrite(WiFi_LED_Connected, HIGH);
       Serial.println("Reconnecting..");
       WiFi.reconnect();
       delay(5000);     
     } 
+    digitalWrite(WiFi_LED_Connected, LOW);
 
    //Gyro
-    if(currentMicros - lastSampleMicros >= (GYRO_SAMPLING_TIME * 1000000) ){// 1,000,000 is seconds to microseconds conversion
+    if(currentMicros - lastSampleMicros >= GYRO_SAMPLING_TIME ){
       lastSampleMicros = currentMicros;
 
       IMU.update();

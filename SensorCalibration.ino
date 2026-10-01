@@ -8,17 +8,17 @@
 
 WiFiClient  client;
 
-#define SSID "MightBreadboard"    //House WiFi: Teenage Nigga Turtles   | Pocket WiFi: MightBreadboard
-#define PASSWORD "Mighty_Breadboard"        //House WiFi: Nigga_Bazooka           | Pocket WiFi: Mighty_Breadboard
+#define SSID                        "Teenage Nigga Turtles"    //House WiFi: Teenage Nigga Turtles   | Pocket WiFi: MightBreadboard
+#define PASSWORD                    "Nigga_Bazooka"        //House WiFi: Nigga_Bazooka           | Pocket WiFi: Mighty_Breadboard
 
 //-------------------------------------Thingspeak-----------------
 #include "ThingSpeak.h" //Thingspeak by mathworks
 
-#define STATUS_CHANNEL_ID 3498647U
-#define STATUS_WRITE_API_KEY "W6I9KNG5O1F41071"
+#define STATUS_CHANNEL_ID           3498647U
+#define STATUS_WRITE_API_KEY        "W6I9KNG5O1F41071"
 
-#define PM_CHANNEL_ID 3506848U
-#define PM_WRITE_API_KEY "ZDEWLBAPYNDSP98U"
+#define PM_CHANNEL_ID               3506848U
+#define PM_WRITE_API_KEY            "ZDEWLBAPYNDSP98U"
 
 int uploadStatus;
 
@@ -38,10 +38,10 @@ uint8_t systemStatus = 0;
 //-------------------------------------RRH62000-------------------
 #include "RRH62000.h"
 
-#define SDA_PIN 21
-#define SCL_PIN 22
+#define SDA_PIN                     21
+#define SCL_PIN                     22
 
-#define RRH_SAMPLING_TIME 180 //in seconds. Sampling interval should be (MovingAverage * 3) 
+#define RRH_SAMPLING_TIME           (180 * 1000) //in seconds. 1,000 is seconds to milliseconds conversion. Sampling interval should be (MovingAverage * 3)
 
 RRH62000 RRH_sensor;
 
@@ -49,40 +49,40 @@ RRH62000 RRH_sensor;
 #include <Wire.h>
 #include "FastIMU.h" //by LiquidCGS
 
-#define IMU_ADDRESS 0x68  // Set to 0x69 if AD0 is tied to 3.3V
+#define IMU_ADDRESS                 0x68  // Set to 0x69 if AD0 is tied to 3.3V
 
 MPU6500 IMU;              // Create MPU6500 FastIMU instance
 calData calib = { 0 };    // Calibration struct (zero-initialized if uncalibrated)
 AccelData accelData;
 GyroData gyroData;
 
-#define GYRO_SAMPLING_TIME ((unsigned long)(0.02f * 1000000)) // must be in microseconds.the Float type is in seconds. 1,000,000 is seconds to microseconds conversion
+#define GYRO_SAMPLING_TIME          ((unsigned long)(0.02f * 1000000)) // must be in microseconds.the Float type is in seconds. 1,000,000 is seconds to microseconds conversion
 
 // Filtered angle variables
 float pitch = 0.0;  //X axis in degrees
 float roll = 0.0;   //Y axis in degrees
 
 //in degrees
-#define TILT_THRESHOLD 50.0f
+#define TILT_THRESHOLD              50.0f
 
 //-------------------------------------Timing---------------------
 unsigned long lastSampleMicros = 0; //For gyro
 unsigned long lastSampleMillis = 0; //For PM
 unsigned long lastStatusMillis = 0; //For status
 
-#define STATUS_INTERVAL 16 //in seconds. the interval on status update
+#define STATUS_INTERVAL             (16 * 1000) //in seconds. the interval on status update. 1,000 is seconds to milliseconds conversion
 
 
 //-------------------------------------Status LED-----------------
-#define PM_LED_Sent_Ok 14
-#define PM_LED_Sent_Err 13
-#define RRH_LED_Connected 18
+#define PM_LED_Sent_Ok              14  //Green
+#define PM_LED_Sent_Err             13  //Red
+#define RRH_LED_Disconnected        18  //Blue
 
-#define Status_LED_Sent_Ok 17
-#define Status_LED_Sent_Err 16
+#define Status_LED_Sent_Ok          17  //Green
+#define Status_LED_Sent_Err         16  //Red
 
-#define Gyro_LED_Connected 19
-#define WiFi_LED_Connected 4
+#define Gyro_LED_Disconnected       19  //Red
+#define WiFi_LED_Disconnected       4   //Blue
 
 //-----------------------------------------------------------------------------------------------------------Complete Run------------------------------------------------------------------------------
 
@@ -95,7 +95,7 @@ unsigned long lastStatusMillis = 0; //For status
     if (!RRH_sensor.begin(SDA_PIN, SCL_PIN)) {
       Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
       while (!RRH_sensor.begin(SDA_PIN, SCL_PIN)){
-        digitalWrite(RRH_LED_Connected, HIGH);
+        digitalWrite(RRH_LED_Disconnected, HIGH);
         Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
         delay(1000);
       }
@@ -107,7 +107,7 @@ unsigned long lastStatusMillis = 0; //For status
     RRH_sensor.setCleaningTime(30);           // Run fan cleaning for 15 seconds
     RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
 
-    digitalWrite(RRH_LED_Connected, LOW);
+    digitalWrite(RRH_LED_Disconnected, LOW);
     Serial.println("RRH62000 Working");
 
   //Gyro
@@ -117,7 +117,7 @@ unsigned long lastStatusMillis = 0; //For status
     // Initialize MPU6500
     int err = IMU.init(calib, IMU_ADDRESS);
     while (err != 0) {
-      digitalWrite(Gyro_LED_Connected, HIGH);
+      digitalWrite(Gyro_LED_Disconnected, HIGH);
       Serial.print("Error initializing MPU6500. Code: ");
       Serial.println(err);
       err = IMU.init(calib, IMU_ADDRESS);
@@ -128,7 +128,7 @@ unsigned long lastStatusMillis = 0; //For status
     IMU.setAccelRange(8);   // Options: 2, 4, 8, 16 (g)
     IMU.setGyroRange(500);  // Options: 250, 500, 1000, 2000 (deg/s)
     
-    digitalWrite(Gyro_LED_Connected, LOW);
+    digitalWrite(Gyro_LED_Disconnected, LOW);
     Serial.println("IMU Working");
 
   //WiFi
@@ -136,11 +136,11 @@ unsigned long lastStatusMillis = 0; //For status
     
     Serial.print("Attempting to connect");
     while(WiFi.status() != WL_CONNECTED){
-      digitalWrite(WiFi_LED_Connected, HIGH);
+      digitalWrite(WiFi_LED_Disconnected, HIGH);
       WiFi.begin(SSID, PASSWORD); 
       delay(5000);     
     } 
-    digitalWrite(WiFi_LED_Connected, LOW);
+    digitalWrite(WiFi_LED_Disconnected, LOW);
     Serial.println("\nConnected.");
     
   //Thingspeak
@@ -156,12 +156,12 @@ unsigned long lastStatusMillis = 0; //For status
 
    //Ensure WiFi is connected
     while(WiFi.status() != WL_CONNECTED){
-      digitalWrite(WiFi_LED_Connected, HIGH);
+      digitalWrite(WiFi_LED_Disconnected, HIGH);
       Serial.println("Reconnecting..");
       WiFi.reconnect();
       delay(5000);     
     } 
-    digitalWrite(WiFi_LED_Connected, LOW);
+    digitalWrite(WiFi_LED_Disconnected, LOW);
 
    //Gyro
     if(currentMicros - lastSampleMicros >= GYRO_SAMPLING_TIME ){
@@ -189,7 +189,7 @@ unsigned long lastStatusMillis = 0; //For status
     }
 
    //PM
-    if(currentMillis - lastSampleMillis >= (RRH_SAMPLING_TIME * 1000) ){  //1,000 is seconds to milliseconds conversion
+    if(currentMillis - lastSampleMillis >= RRH_SAMPLING_TIME  ){  //1,000 is seconds to milliseconds conversion
       lastSampleMillis = currentMillis;
 
       if (RRH_sensor.readSensor()) {
@@ -204,6 +204,8 @@ unsigned long lastStatusMillis = 0; //For status
 
         uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
         while (uploadStatus != 200){
+
+          digitalWrite(PM_LED_Sent_Err, HIGH);
           Serial.print("Problem updating PM channel. HTTP error code ");
           Serial.println(uploadStatus);
           
@@ -211,6 +213,13 @@ unsigned long lastStatusMillis = 0; //For status
           delay(3000);
           uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
         }
+
+        digitalWrite(PM_LED_Sent_Err, LOW);
+        delay(50);
+        digitalWrite(PM_LED_Sent_Ok, HIGH);
+        delay(300);
+        digitalWrite(PM_LED_Sent_Ok, LOW);
+
         Serial.println("PM Channel update successful.");
 
         if (RRH_sensor.status_fan_malfunction) {
@@ -222,13 +231,12 @@ unsigned long lastStatusMillis = 0; //For status
         if (RRH_sensor.status_dust_accumulation) {
           RRH_sensor.triggerManualCleaning();
         }
-
       }
     }
 
    //Status
     if(systemStatus){ // != 0, wwhich means it has an error
-      if(currentMillis - lastStatusMillis >= (STATUS_INTERVAL * 1000) ){  //1,000 is seconds to milliseconds conversion
+      if(currentMillis - lastStatusMillis >= STATUS_INTERVAL ){ 
         lastStatusMillis = currentMillis;
         // set the fields with the values
         ThingSpeak.setField(1, systemStatus); 

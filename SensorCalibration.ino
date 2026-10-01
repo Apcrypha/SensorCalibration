@@ -8,8 +8,8 @@
 
 WiFiClient  client;
 
-#define SSID                        "Teenage Nigga Turtles"    //House WiFi: Teenage Nigga Turtles   | Pocket WiFi: MightBreadboard
-#define PASSWORD                    "Nigga_Bazooka"        //House WiFi: Nigga_Bazooka           | Pocket WiFi: Mighty_Breadboard
+#define SSID                        "MightBreadboard"    //House WiFi: Teenage Nigga Turtles   | Pocket WiFi: MightBreadboard
+#define PASSWORD                    "Mighty_Breadboard"        //House WiFi: Nigga_Bazooka           | Pocket WiFi: Mighty_Breadboard
 
 //-------------------------------------Thingspeak-----------------
 #include "ThingSpeak.h" //Thingspeak by mathworks
@@ -56,7 +56,9 @@ calData calib = { 0 };    // Calibration struct (zero-initialized if uncalibrate
 AccelData accelData;
 GyroData gyroData;
 
-#define GYRO_SAMPLING_TIME          ((unsigned long)(0.02f * 1000000)) // must be in microseconds.the Float type is in seconds. 1,000,000 is seconds to microseconds conversion
+#define GYRO_DELTA_TIME             0.02f //in seconds
+#define GYRO_SAMPLING_TIME          ((unsigned long)(GYRO_DELTA_TIME  * 1000000)) // must be in microseconds. 1,000,000 is seconds to microseconds 
+
 
 // Filtered angle variables
 float pitch = 0.0;  //X axis in degrees
@@ -177,8 +179,8 @@ unsigned long lastStatusMillis = 0; //For status
 
       // 2. Complementary Filter
       // 96% Gyro integration + 4% Accelerometer anchor
-      roll = 0.96 * (roll + gyroData.gyroX * GYRO_SAMPLING_TIME) + 0.04 * accelRoll;
-      pitch = 0.96 * (pitch + gyroData.gyroY * GYRO_SAMPLING_TIME) + 0.04 * accelPitch;
+      roll = 0.96 * (roll + gyroData.gyroX * GYRO_DELTA_TIME) + 0.04 * accelRoll;
+      pitch = 0.96 * (pitch + gyroData.gyroY * GYRO_DELTA_TIME) + 0.04 * accelPitch;
 
       if(abs(roll) >= TILT_THRESHOLD || abs(pitch) >= TILT_THRESHOLD){
         systemStatus |= 1<<0; //Forces bit 0 to 1
@@ -238,20 +240,26 @@ unsigned long lastStatusMillis = 0; //For status
     if(systemStatus){ // != 0, wwhich means it has an error
       if(currentMillis - lastStatusMillis >= STATUS_INTERVAL ){ 
         lastStatusMillis = currentMillis;
+
         // set the fields with the values
         ThingSpeak.setField(1, systemStatus); 
         uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY); 
         while ( uploadStatus != 200){
-          Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
-          WiFi.reconnect();
-          delay(3000);
-          uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
+        digitalWrite(Status_LED_Sent_Err, HIGH);
+        Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
+        WiFi.reconnect();
+        delay(3000);
+        uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
         }
+        digitalWrite(Status_LED_Sent_Err, LOW);
+        delay(50);
+        digitalWrite(Status_LED_Sent_Ok, HIGH);
+        delay(300);
+        digitalWrite(Status_LED_Sent_Ok, LOW);
         Serial.println("Status Channel: Field 1 update successful.");
       }
     }
   }
-
 #endif
 
 

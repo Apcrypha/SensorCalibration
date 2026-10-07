@@ -257,22 +257,32 @@ void loop() {
   if(systemStatus){ // != 0, wwhich means it has an error
     if(currentMillis - lastStatusMillis >= STATUS_INTERVAL ){ 
       lastStatusMillis = currentMillis;
-      // set the fields with the values
+
       ThingSpeak.setField(1, systemStatus); 
-      uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY); 
-      while ( uploadStatus != 200){
-      digitalWrite(STATUS_LED_SENT_ERR, HIGH);
-      Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
-      WiFi.reconnect();
-      delay(3000);
       uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
+
+      while ( uploadStatus != 200){
+        Send_index ++;
+        
+        digitalWrite(STATUS_LED_SENT_ERR, HIGH);
+        Serial.println("Problem updating Status channel: Field 1. HTTP error code " + String(uploadStatus));
+        WiFi.reconnect();
+        delay(3000);
+        uploadStatus = ThingSpeak.writeFields(STATUS_CHANNEL_ID, STATUS_WRITE_API_KEY);
+
+        if(Send_index >= SEND_TIMEOUT){
+          break;
+        }
       }
       digitalWrite(STATUS_LED_SENT_ERR, LOW);
       delay(50);
       digitalWrite(STATUS_LED_SENT_OK, HIGH);
       delay(300);
       digitalWrite(STATUS_LED_SENT_OK, LOW);
-      Serial.println("Status Channel: Field 1 update successful.");
+      if(Send_index >= SEND_TIMEOUT){
+        Send_index = 0;
+        Serial.println("Status Channel: Field 1 update Skipped");  
+      } else  Serial.println("Status Channel: Field 1 update successful.");
     }
   }
 }

@@ -24,6 +24,8 @@
   int uploadStatus;
   bool Cleaning_State = false;
 
+  uint32_t overallStatus = 0;
+
   uint8_t systemStatus = 0;  
   /*  
   ******Bit masking for Air monitoring Status******
@@ -291,10 +293,49 @@ void checkTalkBackCommands() {
         RRH_sensor.triggerManualCleaning();
         Cleaning_State = true;
       }
+     //Overall status
+      else if (command = "Overall_Status") {
+        overallStatus = 0;
+
+        roll  = fabsf(roll);
+        roll  = constrain(roll, 0.0f, 180.0f);
+        roll  = lroundf(roll * 10.0f) / 10.0f; // e.g., -123.456f -> 123.5f
+
+        pitch = fabsf(pitch);
+        pitch = constrain(pitch, 0.0f, 180.0f);
+        pitch = lroundf(pitch * 10.0f) / 10.0f; // e.g., -89.189f -> 89.2f
+
+        getOverall_Status(roll, pitch);
+
+      }
     }
   } else {Serial.printf("TalkBack check failed, HTTP Code: %d\n", httpCode);
     http.end();
   }
+}
+
+void getOverall_Status(float roll, float pitch){
+  // Pack booleans into Bits 0-2
+  if (digitalRead(FAN_LED_WORKING))   overallStatus |= (1 << 0);
+  if (RRH_sensor.readUniqueID())      overallStatus |= (1 << 1);  // if ID can be read then sensor is connected
+  if (IMU_Connected())                overallStatus |= (1 << 2);  // IMU.update() returns a zero when sucessfully updated
+
+  // Convert 1-decimal floats to scaled integers (e.g., 123.5 -> 1235)
+  uint32_t rollPacked  = (uint32_t)lroundf(roll * 10.0f);
+  uint32_t pitchPacked = (uint32_t)lroundf(pitch * 10.0f);
+
+  overallStatus |= ((rollPacked & 0x7FFUL) << 3);     // Shift Roll into Bits 3-13 (11 bits, mask 0x7FF)
+  overallStatus |= ((pitchPacked & 0x7FFUL) << 14);   // Shift Pitch into Bits 14-24 (11 bits, mask 0x7FF)
+
+}
+
+bool IMU_Connected() {
+  Wire.beginTransmission(IMU_ADDRESS);
+  // endTransmission() returns:
+  // 0: Success (ACK received - device is connected)
+  // 2: Address NACK (device disconnected/powered off)
+  // 4: Other error / Bus hang
+  return (Wire.endTransmission() == 0);
 }
 
 void wifiConnect(){

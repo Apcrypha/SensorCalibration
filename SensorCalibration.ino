@@ -1,20 +1,25 @@
 
-//-------------------------------------WiFi-----------------------
+//-------------------------------------WiFi------------------------
   #include <WiFi.h>
 
   WiFiClient  client;
 
-  #define SSID                        "Teenage Nigga Turtles"    //House WiFi: Teenage Nigga Turtles   | Pocket WiFi: MightBreadboard
-  #define PASSWORD                    "Nigga_Bazooka"        //House WiFi: Nigga_Bazooka           | Pocket WiFi: Mighty_Breadboard
+  #define SSID                        "Mighty Breadboard"    //House WiFi: Teenage Nigga Turtles   | Pocket WiFi: Mighty Breadboard
+  #define PASSWORD                    "We_are:Mighty-Breadboard"        //House WiFi: Nigga_Bazooka           | Pocket WiFi: We_are:Mighty-Breadboard
 
-//-------------------------------------Thingspeak-----------------
+//-------------------------------------Thingspeak------------------
   #include "ThingSpeak.h" //Thingspeak by mathworks
+  #include <HTTPClient.h>
+
 
   #define STATUS_CHANNEL_ID           3498647U
   #define STATUS_WRITE_API_KEY        "W6I9KNG5O1F41071"
 
   #define PM_CHANNEL_ID               3506848U
   #define PM_WRITE_API_KEY            "ZDEWLBAPYNDSP98U"
+
+  //                                                                      TALKBACK_ID                      TALKBACK_API_KEY        
+  #define TALKBACK_URL                "https://api.thingspeak.com/talkbacks/57954/commands/execute?api_key=3R1GNZ8OKY0ZIXYI"
 
   int uploadStatus;
 
@@ -31,7 +36,7 @@
           |  6     |         -            |
           |  7     |         -            |
   */
-//-------------------------------------RRH62000-------------------
+//-------------------------------------RRH62000--------------------
   #include "RRH62000.h"
 
   #define SDA_PIN                     21
@@ -41,7 +46,7 @@
 
   RRH62000 RRH_sensor;
 
-//-------------------------------------Gyro-----------------------
+//-------------------------------------Gyro------------------------
   #include <Wire.h>
   #include "FastIMU.h" //by LiquidCGS
 
@@ -63,10 +68,11 @@
   //in degrees
   #define TILT_THRESHOLD              40.0f
 
-//-------------------------------------Timing---------------------
+//-------------------------------------Timing----------------------
   unsigned long lastSampleMicros = 0; //For gyro
   unsigned long lastSampleMillis = 0; //For PM
   unsigned long lastStatusMillis = 0; //For status
+  unsigned long lastTalkbackMillis = 0; //For talkback
 
   unsigned long currentMicros;
   unsigned long currentMillis;
@@ -77,9 +83,9 @@
   #define WIFI_DISCONNECTION_TIMEOUT  10   //When reconnecting retries reaches this, the code completely renews the connection
   uint8_t Reconnecting_index = 0;
 
-  #define STATUS_INTERVAL             (16 * 1000) //in seconds. the interval on status update. 1,000 is seconds to milliseconds conversion
+  #define THINGSPEAK_INTERVAL             (16 * 1000) //in seconds. the interval on status update. 1,000 is seconds to milliseconds conversion
 
-//-------------------------------------Status LED-----------------
+//-------------------------------------LED-------------------------
   #define PM_LED_SENT_OK              13  //Green
   #define PM_LED_SENT_ERR             14  //Red
   #define RRH_LED_DISCONNECTED        16  //Blue
@@ -92,28 +98,15 @@
   #define WiFi_LED_DISCONNECTED       23  //Red
   #define FAN_LED_WORKING             25  //Green
 
-//-------------------------------------FAN---------------------
+//-------------------------------------FAN-------------------------
   #define FAN_PIN                     26
+  #define TEMPERATURE_THRESHOLD       29  //in °C
 
 void setup() {
   Serial.begin(115200); 
   Serial.println("Starting.......");
  //RRH62000  
-  if (!RRH_sensor.begin(SDA_PIN, SCL_PIN)) {
-    Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
-    while (!RRH_sensor.begin(SDA_PIN, SCL_PIN)){
-      digitalWrite(RRH_LED_DISCONNECTED, HIGH);
-      Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
-      delay(1000);
-    }
-  }
-  // Configure module parameters via I2C
-  RRH_sensor.setMovingAverage(60);          // Sampling interval should be MovingAverage * 3 
-  RRH_sensor.setCleaningInterval(2880);     // Set auto-cleaning interval (2880 * 30s = 24 hours)
-  RRH_sensor.setCleaningTime(30);           // Run fan cleaning for 15 seconds
-  RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
-  digitalWrite(RRH_LED_DISCONNECTED, LOW);
-  Serial.println("RRH62000 Working");
+  initializeRRH62000();
  //Gyro
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(100000);  
@@ -164,6 +157,8 @@ void setup() {
 
   Serial.println("LED Configured");
 
+  digitalWrite(ESP32_LED_STATUS, HIGH);
+
 }
 void loop() {
   currentMicros = micros();
@@ -178,10 +173,10 @@ void loop() {
     Reconnecting_index ++;
    
     if(Reconnecting_index >= WIFI_DISCONNECTION_TIMEOUT){
+      Reconnecting_index = 0;
       WiFi.disconnect();
       delay(2000);
       wifiConnect();
-      Reconnecting_index = 0;
     }     
   } 
   digitalWrite(WiFi_LED_DISCONNECTED, LOW);
@@ -219,6 +214,8 @@ void loop() {
       ThingSpeak.setField(7,RRH_sensor.pm1_0_kcl);
       ThingSpeak.setField(8,RRH_sensor.pm1_0_smoke);
 
+      enclosureFAN(RRH_sensor.temperature); //Condition for enclosure fan
+
       uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
       while (uploadStatus != 200){
         Send_index ++;
@@ -255,7 +252,7 @@ void loop() {
   }
  //Status
   if(systemStatus){ // != 0, wwhich means it has an error
-    if(currentMillis - lastStatusMillis >= STATUS_INTERVAL ){ 
+    if(currentMillis - lastStatusMillis >= THINGSPEAK_INTERVAL ){ 
       lastStatusMillis = currentMillis;
 
       ThingSpeak.setField(1, systemStatus); 
@@ -285,8 +282,12 @@ void loop() {
       } else  Serial.println("Status Channel: Field 1 update successful.");
     }
   }
+ //Talkback
+  if(currentMillis - lastTalkbackMillis >= THINGSPEAK_INTERVAL){
+    lastTalkbackMillis = currentMillis;
+    checkTalkBackCommands();
+  }
 }
-
 
 void wifiConnect(){
   Serial.print("Attempting to connect.....");
@@ -294,12 +295,75 @@ void wifiConnect(){
     digitalWrite(WiFi_LED_DISCONNECTED, HIGH);
     WiFi.begin(SSID, PASSWORD); 
     delay(5000);     
+    Reconnecting_index ++;
+
+    if(Reconnecting_index >= WIFI_DISCONNECTION_TIMEOUT){//Cant connect
+      ESP.restart();  //restart ESP32
+    }
   } 
   digitalWrite(WiFi_LED_DISCONNECTED, LOW);
   Serial.println("\nConnected.");
 
 }
 
+void enclosureFAN(float temperature){
+  if(temperature >= TEMPERATURE_THRESHOLD){
+    digitalWrite(FAN_PIN, HIGH);
+    digitalWrite(FAN_LED_WORKING, HIGH);
+    Serial.println("Fan Working");
+  } else {
+    digitalWrite(FAN_PIN, LOW);
+    digitalWrite(FAN_LED_WORKING, LOW);
+    Serial.println("Fan OFF");
+  }
 
+}
 
+void checkTalkBackCommands() {
+  HTTPClient http;
+
+  http.begin(TALKBACK_URL);
+  int httpCode = http.POST(""); // POST request fetches and pops the command
+
+  if (httpCode == HTTP_CODE_OK) {
+    String command = http.getString();
+    command.trim(); // Clean whitespace or newlines
+      
+    if (command.length() > 0) {
+      Serial.print("TalkBack Command Received: " + command);
+        
+      // --- Execute logic based on command ---
+      if (command == "RESTART_ESP") {
+        ESP.restart(); // Software reset the ESP32
+      }
+      else if(command == "RESTART_RRH62000"){
+        RRH_sensor.resetModule();
+        initializeRRH62000();
+        lastSampleMillis = millis(); //makes sure that there is a 3mins gap before sampling
+      }
+      
+    }
+  } else {Serial.printf("TalkBack check failed, HTTP Code: %d\n", httpCode);
+    http.end();
+  }
+}
+
+void initializeRRH62000(){
+  RRH_sensor.resetModule();
+  if (!RRH_sensor.begin(SDA_PIN, SCL_PIN)) {
+    Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
+    while (!RRH_sensor.begin(SDA_PIN, SCL_PIN)){
+      digitalWrite(RRH_LED_DISCONNECTED, HIGH);
+      Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
+      delay(1000);
+    }
+  }
+  // Configure module parameters via I2C
+  RRH_sensor.setMovingAverage(60);          // Sampling interval should be MovingAverage * 3 
+  RRH_sensor.setCleaningInterval(2880);     // Set auto-cleaning interval (2880 * 30s = 24 hours)
+  RRH_sensor.setCleaningTime(30);           // Run fan cleaning for 15 seconds
+  RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
+  digitalWrite(RRH_LED_DISCONNECTED, LOW);
+  Serial.println("RRH62000 Working");
+}
 

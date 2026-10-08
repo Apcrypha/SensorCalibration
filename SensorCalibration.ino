@@ -22,6 +22,7 @@
   #define TALKBACK_URL                "https://api.thingspeak.com/talkbacks/57954/commands/execute?api_key=3R1GNZ8OKY0ZIXYI"
 
   int uploadStatus;
+  bool Cleaning_State = false;
 
   uint8_t systemStatus = 0;  
   /*  
@@ -73,6 +74,7 @@
   unsigned long lastSampleMillis = 0; //For PM
   unsigned long lastStatusMillis = 0; //For status
   unsigned long lastTalkbackMillis = 0; //For talkback
+  unsigned long lastCleaningMillis = 0; //For cleaning
 
   unsigned long currentMicros;
   unsigned long currentMillis;
@@ -83,7 +85,8 @@
   #define WIFI_DISCONNECTION_TIMEOUT  10   //When reconnecting retries reaches this, the code completely renews the connection
   uint8_t Reconnecting_index = 0;
 
-  #define THINGSPEAK_INTERVAL             (16 * 1000) //in seconds. the interval on status update. 1,000 is seconds to milliseconds conversion
+  #define THINGSPEAK_INTERVAL             (16 * 1000) //in microseconds. the interval on status update. 1,000 is seconds to milliseconds conversion
+  #define CLEANING_TIME                   (60 * 1000) //in microseconds. cleaning time
 
 //-------------------------------------LED-------------------------
   #define PM_LED_SENT_OK              13  //Green
@@ -203,59 +206,14 @@ void loop() {
     }
   }
  //PM
-  if(currentMillis - lastSampleMillis >= RRH_SAMPLING_TIME  ){
-    lastSampleMillis = currentMillis;
-    if (RRH_sensor.readSensor()) {
-      ThingSpeak.setField(1,RRH_sensor.temperature);
-      ThingSpeak.setField(2,RRH_sensor.humidity);
-      ThingSpeak.setField(3,RRH_sensor.pm10_0_kcl);
-      ThingSpeak.setField(4,RRH_sensor.pm10_0_smoke);
-      ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
-      ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
-      ThingSpeak.setField(7,RRH_sensor.pm1_0_kcl);
-      ThingSpeak.setField(8,RRH_sensor.pm1_0_smoke);
-
-      enclosureFAN(RRH_sensor.temperature); //Condition for enclosure fan
-
-      uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
-      while (uploadStatus != 200){
-        Send_index ++;
-
-        digitalWrite(PM_LED_SENT_ERR, HIGH);
-        Serial.print("Problem updating PM channel. HTTP error code ");
-        Serial.println(uploadStatus);
-        
-        WiFi.reconnect();
-        delay(3000);
-        uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
-      
-        if(Send_index >= SEND_TIMEOUT){//Limit the retries
-          break;
-        }
-      }
-      digitalWrite(PM_LED_SENT_ERR, LOW);
-      delay(50);
-      digitalWrite(PM_LED_SENT_OK, HIGH);
-      delay(300);
-      digitalWrite(PM_LED_SENT_OK, LOW);
-
-      if(Send_index >= SEND_TIMEOUT){
-        Send_index = 0;
-        Serial.println("PM Channel update Skipped");
-      } else  Serial.println("PM Channel update successful."); 
-      
-      client.stop();
-
-      if (RRH_sensor.status_fan_malfunction) {
-        systemStatus |= 1 << 1; //Forces bit 1 to 1
-      } else  systemStatus &= ~(1 << 1);  //Forces bit 1 to 0
-
-      if (RRH_sensor.status_high_concentration){
-        systemStatus |= 1 << 2; //Forces bit 2 to 1
-      } else  systemStatus &= ~(1 << 2);  //Forces bit 2 to 0
-
-      if (RRH_sensor.status_dust_accumulation) RRH_sensor.triggerManualCleaning();
+  if (Cleaning_State){
+    if(currentMillis - lastCleaningMillis >= CLEANING_TIME){
+      Cleaning_State = false;
     }
+  }
+  else if(currentMillis - lastSampleMillis >= RRH_SAMPLING_TIME  ){
+    lastSampleMillis = currentMillis;
+    readPM();
   }
  //Status
   if(systemStatus){ // != 0, wwhich means it has an error
@@ -296,6 +254,46 @@ void loop() {
   if(currentMillis - lastTalkbackMillis >= THINGSPEAK_INTERVAL){
     lastTalkbackMillis = currentMillis;
     checkTalkBackCommands();
+  }
+}
+
+void checkTalkBackCommands() {
+  HTTPClient http;
+
+  http.begin(TALKBACK_URL);
+  int httpCode = http.POST(""); // POST request fetches and pops the command
+
+  if (httpCode == HTTP_CODE_OK) {
+    String command = http.getString();
+    command.trim(); // Clean whitespace or newlines
+      
+    if (command.length() > 0) {
+     //Restart ESP  
+      if (command == "RESTART_ESP") {
+        ESP.restart(); // Software reset the ESP32
+      }
+     //Restart RRH62000
+      else if(command == "RESTART_RRH62000"){
+        RRH_sensor.resetModule();
+        initializeRRH62000();
+        lastSampleMillis = millis(); //makes sure that there is a 3mins gap before sampling
+      }
+     //Set Fan Speed
+      else if (command.startsWith("FAN_")) {
+        String valueStr = command.substring(4); // Extract substring starting right after "FAN_" (Index 4 to end)
+        int fanSpeed = valueStr.toInt(); // Converts string to integer
+        RRH_sensor.setFanSpeed(fanSpeed);
+        Serial.printf("Fan speed updated to %d%%\n", fanSpeed);
+      }
+     //Manual Cleaning
+      else if(command = "Clean"){
+        lastCleaningMillis = millis();
+        RRH_sensor.triggerManualCleaning();
+        Cleaning_State = true;
+      }
+    }
+  } else {Serial.printf("TalkBack check failed, HTTP Code: %d\n", httpCode);
+    http.end();
   }
 }
 
@@ -348,48 +346,57 @@ void initializeRRH62000(){
   Serial.println("RRH62000 Working");
 }
 
-void checkTalkBackCommands() {
-  HTTPClient http;
+void readPM(){
+  if (RRH_sensor.readSensor()) {
+    ThingSpeak.setField(1,RRH_sensor.temperature);
+    ThingSpeak.setField(2,RRH_sensor.humidity);
+    ThingSpeak.setField(3,RRH_sensor.pm10_0_kcl);
+    ThingSpeak.setField(4,RRH_sensor.pm10_0_smoke);
+    ThingSpeak.setField(5,RRH_sensor.pm2_5_kcl);
+    ThingSpeak.setField(6,RRH_sensor.pm2_5_smoke);
+    ThingSpeak.setField(7,RRH_sensor.pm1_0_kcl);
+    ThingSpeak.setField(8,RRH_sensor.pm1_0_smoke);
 
-  http.begin(TALKBACK_URL);
-  int httpCode = http.POST(""); // POST request fetches and pops the command
+    enclosureFAN(RRH_sensor.temperature); //Condition for enclosure fan
 
-  if (httpCode == HTTP_CODE_OK) {
-    String command = http.getString();
-    command.trim(); // Clean whitespace or newlines
+    uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
+    while (uploadStatus != 200){
+      Send_index ++;
+
+      digitalWrite(PM_LED_SENT_ERR, HIGH);
+      Serial.print("Problem updating PM channel. HTTP error code ");
+      Serial.println(uploadStatus);
+        
+      WiFi.reconnect();
+      delay(3000);
+      uploadStatus = ThingSpeak.writeFields(PM_CHANNEL_ID, PM_WRITE_API_KEY);
       
-    if (command.length() > 0) {
-     //Restart ESP  
-      if (command == "RESTART_ESP") {
-        ESP.restart(); // Software reset the ESP32
-      }
-     //Restart RRH62000
-      else if(command == "RESTART_RRH62000"){
-        RRH_sensor.resetModule();
-        initializeRRH62000();
-        lastSampleMillis = millis(); //makes sure that there is a 3mins gap before sampling
-      }
-     //Set Fan Speed
-      else if (command.startsWith("FAN_")) {
-        String valueStr = command.substring(4); // Extract substring starting right after "FAN_" (Index 4 to end)
-        int fanSpeed = valueStr.toInt(); // Converts string to integer
-        RRH_sensor.setFanSpeed(fanSpeed);
-        Serial.printf("Fan speed updated to %d%%\n", fanSpeed);
-      }
-     //Manual Cleaning
-      else if(command = "Clean"){
-        lastSampleMillis = millis();
-        cleanRRH62000(true);
+      if(Send_index >= SEND_TIMEOUT){//Limit the retries
+        break;
       }
     }
-  } else {Serial.printf("TalkBack check failed, HTTP Code: %d\n", httpCode);
-    http.end();
+    digitalWrite(PM_LED_SENT_ERR, LOW);
+
+    if(Send_index >= SEND_TIMEOUT){
+      Send_index = 0;
+      Serial.println("PM Channel update Skipped");
+    } else {
+      Send_index = 0;
+      digitalWrite(PM_LED_SENT_OK, HIGH);
+      delay(200);
+      digitalWrite(PM_LED_SENT_OK, LOW);
+      Serial.println("PM Channel update successful."); 
+    }
+    client.stop();
+   
+    if (RRH_sensor.status_fan_malfunction) {
+      systemStatus |= 1 << 1; //Forces bit 1 to 1
+    } else  systemStatus &= ~(1 << 1);  //Forces bit 1 to 0
+
+    if (RRH_sensor.status_high_concentration){
+      systemStatus |= 1 << 2; //Forces bit 2 to 1
+    } else  systemStatus &= ~(1 << 2);  //Forces bit 2 to 0
+
+    if (RRH_sensor.status_dust_accumulation) RRH_sensor.triggerManualCleaning();
   }
 }
-
-void cleanRRH62000(bool cleaning){
-  RRH_sensor.triggerManualCleaning();
-
-
-}
-

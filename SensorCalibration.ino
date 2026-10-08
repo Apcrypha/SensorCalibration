@@ -244,6 +244,8 @@ void loop() {
         Serial.println("PM Channel update Skipped");
       } else  Serial.println("PM Channel update successful."); 
       
+      client.stop();
+
       if (RRH_sensor.status_fan_malfunction) {
         systemStatus |= 1 << 1; //Forces bit 1 to 1
       } else  systemStatus &= ~(1 << 1);  //Forces bit 1 to 0
@@ -285,8 +287,10 @@ void loop() {
         Send_index = 0;
         Serial.println("Status Channel: Field 1 update Skipped");  
       } else  Serial.println("Status Channel: Field 1 update successful.");
+      
+      client.stop();
+      systemStatus = 0;
     }
-    systemStatus = 0;
   }
  //Talkback
   if(currentMillis - lastTalkbackMillis >= THINGSPEAK_INTERVAL){
@@ -325,42 +329,6 @@ void enclosureFAN(float temperature){
 
 }
 
-void checkTalkBackCommands() {
-  HTTPClient http;
-
-  http.begin(TALKBACK_URL);
-  int httpCode = http.POST(""); // POST request fetches and pops the command
-
-  if (httpCode == HTTP_CODE_OK) {
-    String command = http.getString();
-    command.trim(); // Clean whitespace or newlines
-      
-    if (command.length() > 0) {
-      Serial.print("TalkBack Command Received: " + command);
-     //Restart ESP  
-      if (command == "RESTART_ESP") {
-        ESP.restart(); // Software reset the ESP32
-      }
-     //Restart RRH62000
-      else if(command == "RESTART_RRH62000"){
-        RRH_sensor.resetModule();
-        initializeRRH62000();
-        lastSampleMillis = millis(); //makes sure that there is a 3mins gap before sampling
-      }
-     //Set Fan Speed
-      else if (command.startsWith("FAN_")) {
-        String valueStr = command.substring(4); // Extract substring starting right after "FAN_" (Index 4 to end)
-        int fanSpeed = valueStr.toInt(); // Converts string to integer
-        RRH_sensor.setFanSpeed(fanSpeed);
-        Serial.printf("Fan speed updated to %d%%\n", fanSpeed);
-      }
-
-    }
-  } else {Serial.printf("TalkBack check failed, HTTP Code: %d\n", httpCode);
-    http.end();
-  }
-}
-
 void initializeRRH62000(){
   RRH_sensor.resetModule();
   if (!RRH_sensor.begin(SDA_PIN, SCL_PIN)) {
@@ -378,5 +346,50 @@ void initializeRRH62000(){
   RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
   digitalWrite(RRH_LED_DISCONNECTED, LOW);
   Serial.println("RRH62000 Working");
+}
+
+void checkTalkBackCommands() {
+  HTTPClient http;
+
+  http.begin(TALKBACK_URL);
+  int httpCode = http.POST(""); // POST request fetches and pops the command
+
+  if (httpCode == HTTP_CODE_OK) {
+    String command = http.getString();
+    command.trim(); // Clean whitespace or newlines
+      
+    if (command.length() > 0) {
+     //Restart ESP  
+      if (command == "RESTART_ESP") {
+        ESP.restart(); // Software reset the ESP32
+      }
+     //Restart RRH62000
+      else if(command == "RESTART_RRH62000"){
+        RRH_sensor.resetModule();
+        initializeRRH62000();
+        lastSampleMillis = millis(); //makes sure that there is a 3mins gap before sampling
+      }
+     //Set Fan Speed
+      else if (command.startsWith("FAN_")) {
+        String valueStr = command.substring(4); // Extract substring starting right after "FAN_" (Index 4 to end)
+        int fanSpeed = valueStr.toInt(); // Converts string to integer
+        RRH_sensor.setFanSpeed(fanSpeed);
+        Serial.printf("Fan speed updated to %d%%\n", fanSpeed);
+      }
+     //Manual Cleaning
+      else if(command = "Clean"){
+        lastSampleMillis = millis();
+        cleanRRH62000(true);
+      }
+    }
+  } else {Serial.printf("TalkBack check failed, HTTP Code: %d\n", httpCode);
+    http.end();
+  }
+}
+
+void cleanRRH62000(bool cleaning){
+  RRH_sensor.triggerManualCleaning();
+
+
 }
 

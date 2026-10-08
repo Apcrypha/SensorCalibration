@@ -26,15 +26,15 @@
   uint8_t systemStatus = 0;  
   /*  
   ******Bit masking for Air monitoring Status******
-          | BIT    |       MEANING        |
-          |  0     |   System Capsized    |
-          |  1     |   Fan Malfunction    |
-          |  2     |         -            |
-          |  3     |         -            |
-          |  4     |         -            |
-          |  5     |         -            |
-          |  6     |         -            |
-          |  7     |         -            |
+          | BIT    |                MEANING               |             DEFINITION
+          |  0     |            System Capsized           |
+          |  1     |            Fan Malfunction           |
+          |  2     |    Extreme particle concentration    |
+          |  3     |         Restart Notification         |   Goes high whenever the esp32 restarts
+          |  4     |                 -                    |
+          |  5     |                 -                    |
+          |  6     |                 -                    |
+          |  7     |                 -                    |
   */
 //-------------------------------------RRH62000--------------------
   #include "RRH62000.h"
@@ -105,6 +105,7 @@
 void setup() {
   Serial.begin(115200); 
   Serial.println("Starting.......");
+  systemStatus |= 1<<4; //Forces bit 4 to 1. makes sure that thingspeak is notified whenever esp32 restarts
  //RRH62000  
   initializeRRH62000();
  //Gyro
@@ -247,6 +248,10 @@ void loop() {
         systemStatus |= 1 << 1; //Forces bit 1 to 1
       } else  systemStatus &= ~(1 << 1);  //Forces bit 1 to 0
 
+      if (RRH_sensor.status_high_concentration){
+        systemStatus |= 1 << 2; //Forces bit 2 to 1
+      } else  systemStatus &= ~(1 << 2);  //Forces bit 2 to 0
+
       if (RRH_sensor.status_dust_accumulation) RRH_sensor.triggerManualCleaning();
     }
   }
@@ -281,6 +286,7 @@ void loop() {
         Serial.println("Status Channel: Field 1 update Skipped");  
       } else  Serial.println("Status Channel: Field 1 update successful.");
     }
+    systemStatus = 0;
   }
  //Talkback
   if(currentMillis - lastTalkbackMillis >= THINGSPEAK_INTERVAL){
@@ -331,17 +337,24 @@ void checkTalkBackCommands() {
       
     if (command.length() > 0) {
       Serial.print("TalkBack Command Received: " + command);
-        
-      // --- Execute logic based on command ---
+     //Restart ESP  
       if (command == "RESTART_ESP") {
         ESP.restart(); // Software reset the ESP32
       }
+     //Restart RRH62000
       else if(command == "RESTART_RRH62000"){
         RRH_sensor.resetModule();
         initializeRRH62000();
         lastSampleMillis = millis(); //makes sure that there is a 3mins gap before sampling
       }
-      
+     //Set Fan Speed
+      else if (command.startsWith("FAN_")) {
+        String valueStr = command.substring(4); // Extract substring starting right after "FAN_" (Index 4 to end)
+        int fanSpeed = valueStr.toInt(); // Converts string to integer
+        RRH_sensor.setFanSpeed(fanSpeed);
+        Serial.printf("Fan speed updated to %d%%\n", fanSpeed);
+      }
+
     }
   } else {Serial.printf("TalkBack check failed, HTTP Code: %d\n", httpCode);
     http.end();
@@ -360,8 +373,8 @@ void initializeRRH62000(){
   }
   // Configure module parameters via I2C
   RRH_sensor.setMovingAverage(60);          // Sampling interval should be MovingAverage * 3 
-  RRH_sensor.setCleaningInterval(2880);     // Set auto-cleaning interval (2880 * 30s = 24 hours)
-  RRH_sensor.setCleaningTime(30);           // Run fan cleaning for 15 seconds
+  RRH_sensor.setCleaningInterval(60480);    // Set auto-cleaning interval (60480 * 30s = 21 days). set to 21 days to make sure cleaning doesnt interrupt PM scanning
+  RRH_sensor.setCleaningTime(60);           // Run fan cleaning for 60 seconds
   RRH_sensor.setFanSpeed(70);               // Set fan speed to 70%
   digitalWrite(RRH_LED_DISCONNECTED, LOW);
   Serial.println("RRH62000 Working");

@@ -1,4 +1,3 @@
-
 //-------------------------------------WiFi------------------------
   #include <WiFi.h>
 
@@ -111,6 +110,21 @@ void setup() {
   Serial.begin(115200); 
   Serial.println("Starting.......");
   systemStatus |= 1<<4; //Forces bit 4 to 1. makes sure that thingspeak is notified whenever esp32 restarts
+ //LED
+  pinMode(PM_LED_SENT_OK, OUTPUT);
+  pinMode(PM_LED_SENT_ERR, OUTPUT);
+  pinMode(RRH_LED_DISCONNECTED, OUTPUT);
+  pinMode(STATUS_LED_SENT_OK, OUTPUT);
+  pinMode(STATUS_LED_SENT_ERR, OUTPUT);
+  pinMode(ESP32_LED_STATUS, OUTPUT);
+  pinMode(GYRO_LED_DISCONNECTED, OUTPUT);
+  pinMode(WiFi_LED_DISCONNECTED, OUTPUT);
+  pinMode(FAN_LED_WORKING, OUTPUT);
+  pinMode(FAN_PIN, OUTPUT);
+
+  Serial.println("LED Configured");
+
+  digitalWrite(ESP32_LED_STATUS, HIGH);
  //RRH62000  
   initializeRRH62000();
  //Gyro
@@ -148,22 +162,6 @@ void setup() {
   ThingSpeak.begin(client);  // Initialize ThingSpeak
   delay(1000);
   Serial.println("ThingSpeak Working");
-
- //LED
-  pinMode(PM_LED_SENT_OK, OUTPUT);
-  pinMode(PM_LED_SENT_ERR, OUTPUT);
-  pinMode(RRH_LED_DISCONNECTED, OUTPUT);
-  pinMode(STATUS_LED_SENT_OK, OUTPUT);
-  pinMode(STATUS_LED_SENT_ERR, OUTPUT);
-  pinMode(ESP32_LED_STATUS, OUTPUT);
-  pinMode(GYRO_LED_DISCONNECTED, OUTPUT);
-  pinMode(WiFi_LED_DISCONNECTED, OUTPUT);
-  pinMode(FAN_LED_WORKING, OUTPUT);
-  pinMode(FAN_PIN, OUTPUT);
-
-  Serial.println("LED Configured");
-
-  digitalWrite(ESP32_LED_STATUS, HIGH);
 
 }
 void loop() {
@@ -369,7 +367,6 @@ void enclosureFAN(float temperature){
 }
 
 void initializeRRH62000(){
-  RRH_sensor.resetModule();
   if (!RRH_sensor.begin(SDA_PIN, SCL_PIN)) {
     Serial.println("Failed to detect RRH62000 sensor. Check wiring & SEL pin!");
     while (!RRH_sensor.begin(SDA_PIN, SCL_PIN)){
